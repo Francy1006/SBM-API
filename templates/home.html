@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ api_name }} - {{ company }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.9;
+        }
+
+        .version-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 15px;
+            border-radius: 20px;
+            display: inline-block;
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        .content {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+        }
+
+        .card h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+
+        .endpoint {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .endpoint h4 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+
+        .endpoint .url {
+            background: #e9ecef;
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            color: #495057;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+
+        .method {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-right: 5px;
+        }
+
+        .method.get { background: #d4edda; color: #155724; }
+        .method.post { background: #d1ecf1; color: #0c5460; }
+        .method.put { background: #fff3cd; color: #856404; }
+        .method.delete { background: #f8d7da; color: #721c24; }
+
+        .description {
+            color: #666;
+            line-height: 1.6;
+            margin-top: 10px;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            background: rgba(255,255,255,0.8);
+            border-radius: 10px;
+            color: #666;
+        }
+
+        .pasta-decoration {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 2rem;
+            opacity: 0.1;
+            transform: rotate(15deg);
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .content {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="pasta-decoration">🍝</div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>{{ api_name }}</h1>
+            <div class="subtitle">API REST para {{ company }}</div>
+            <div class="version-badge">v{{ version }}</div>
+        </div>
+
+        <div class="content">
+            <div class="card">
+                <h3>🚀 Endpoints Disponibles</h3>
+                {% for endpoint in endpoints %}
+                <div class="endpoint">
+                    <h4>{{ endpoint.name }}</h4>
+                    <div class="url">{{ endpoint.url }}</div>
+                    <div>
+                        {% for method in endpoint.method.split|slice:":1" %}
+                            <span class="method {{ method.lower }}">{{ method }}</span>
+                        {% endfor %}
+                        {% if endpoint.method.split|length > 1 %}
+                            {% for method in endpoint.method.split|slice:"1:" %}
+                                <span class="method {{ method.lower }}">{{ method }}</span>
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+                    <div class="description">{{ endpoint.description }}</div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="card">
+                <h3>📚 Documentación</h3>
+                <div class="endpoint">
+                    <h4>Modelo ItemGroup</h4>
+                    <div class="description">
+                        <strong>Campos:</strong><br>
+                        • id (AutoField)<br>
+                        • group_name (CharField, max_length=50)<br>
+                        • description (TextField)<br>
+                        • catalog_render (BooleanField, default=True)<br>
+                        • created_at (DateTimeField, auto_now_add=True)<br>
+                        • updated_at (DateTimeField, auto_now=True)
+                    </div>
+                </div>
+                
+                <div class="endpoint">
+                    <h4>Autenticación</h4>
+                    <div class="description">
+                        La API requiere autenticación. Puedes obtener un token usando:<br>
+                        <code>POST /api-token-auth/</code><br>
+                        Con credenciales: username y password
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h3>🔧 Acceso Rápido</h3>
+                <div class="endpoint">
+                    <h4>Panel de Administración</h4>
+                    <div class="description">
+                        <a href="/admin/" target="_blank" style="color: #667eea; text-decoration: none; font-weight: bold;">
+                            → Ir al Admin Panel
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="endpoint">
+                    <h4>API Browser</h4>
+                    <div class="description">
+                        <a href="/store/api/" target="_blank" style="color: #667eea; text-decoration: none; font-weight: bold;">
+                            → Explorar API
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="endpoint">
+                    <h4>Documentación Completa</h4>
+                    <div class="description">
+                        <a href="/API_DOCUMENTATION.md" target="_blank" style="color: #667eea; text-decoration: none; font-weight: bold;">
+                            → Ver Documentación
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2024 {{ company }} - Desarrollado con Django REST Framework</p>
+            <p>Servidor corriendo en puerto 8081</p>
+        </div>
+    </div>
+</body>
+</html> 
