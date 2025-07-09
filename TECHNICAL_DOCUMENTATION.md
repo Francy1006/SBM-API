@@ -273,6 +273,77 @@ GET    /admin/                   # Panel de administración Django
 GET    /                         # Página principal con documentación
 ```
 
+### Franquicias (Franchise)
+
+- **Listar franquicias (paginado, ordenado por id descendente, búsqueda):**
+  - `GET /api/franchises/?page=1&search=texto`
+  - Page size: 20 (por página)
+  - Orden: más recientes primero (`id` descendente)
+  - Búsqueda segura (SearchFilter) en los campos: `franchise`, `description`, `code`
+  - Ejemplo de respuesta:
+    ```json
+    {
+      "count": 1,
+      "next": null,
+      "previous": null,
+      "results": [
+        {
+          "id": 1,
+          "code": "550e8400-e29b-41d4-a716-446655440000",
+          "franchise": "McDonald's",
+          "description": "Restaurante de comida rápida",
+          "state": 1,
+          "state_name": "Activo",
+          "field_verbose_names": {
+            "id": "ID",
+            "code": "Código UUID",
+            "franchise": "Franquicia",
+            "description": "Descripción",
+            "state": "Estado"
+          }
+        }
+      ]
+    }
+    ```
+
+- **Crear franquicia:**
+  - `POST /api/franchises/`
+  - Body:
+    ```json
+    {
+      "franchise": "Nombre de la Franquicia",
+      "description": "Descripción",
+      "state": 1
+    }
+    ```
+
+- **Soft delete (desactivar franquicia por código):**
+  - `POST /api/franchises/soft_delete/`
+  - Body:
+    ```json
+    {
+      "code": "550e8400-e29b-41d4-a716-446655440000"
+    }
+    ```
+  - Cambia el estado a 2 (desactivado)
+
+- **Filtrar por estado:**
+  - `GET /api/franchises/by_state/?state_id=1`
+
+- **Campos con verbose_name:**
+  - Todos los serializers de franquicia y estado incluyen el campo `field_verbose_names` con los nombres legibles de cada campo.
+
+### Estados de Franquicia (FranchiseState)
+
+- **Listar estados:**
+  - `GET /api/franchise-states/`
+
+- **Listar solo activos:**
+  - `GET /api/franchise-states/active/`
+
+- **Crear estado:**
+  - `POST /api/franchise-states/`
+
 ### Ejemplos de Uso
 
 #### Verificar estado de la API

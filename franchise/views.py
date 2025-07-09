@@ -50,7 +50,7 @@ class FranchiseViewSet(viewsets.ModelViewSet):
     filterset_fields = ['state', 'franchise']
     search_fields = ['franchise', 'description', 'code']
     ordering_fields = ['id', 'franchise', 'code', 'state']
-    ordering = ['franchise']
+    ordering = ['-id']
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
