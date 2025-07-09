@@ -46,6 +46,7 @@ THIRD_APPS = [
 
 OWN_APPS = [
     'franchise',  # Gestión de franquicias
+    'catalog',    # Gestión de catálogo
 ]
 
 INSTALLED_APPS = [
@@ -60,6 +61,15 @@ INSTALLED_APPS = [
     'corsheaders',
     'django_filters',
     'franchise',  # Gestión de franquicias
+    'catalog',    # Gestión de catálogo
+    'accounting', # Gestión de contabilidad
+    'support',    # Soporte
+    'price',      # Precios
+    'config',     # Configuración
+    'fiscal',     # Fiscal
+    'inventory',  # Inventario
+    'sales',      # Ventas
+    'users',      # Usuarios
 ]
 
 MIDDLEWARE = [
@@ -189,6 +199,15 @@ CORS_ALLOWED_ORIGINS = str(env("CORS_ALLOWED_ORIGINS")).split(",") + [
 # Enable migrations only for Django system apps
 MIGRATION_MODULES = {
     'franchise': None,  # Desactivar migraciones para usar Flyway
+    'catalog': None,    # Desactivar migraciones para usar Flyway
+    'accounting': None, # Desactivar migraciones para usar Flyway
+    'support': None,    # Desactivar migraciones para usar Flyway
+    'price': None,      # Desactivar migraciones para usar Flyway
+    'config': None,     # Desactivar migraciones para usar Flyway
+    'fiscal': None,     # Desactivar migraciones para usar Flyway
+    'inventory': None,  # Desactivar migraciones para usar Flyway
+    'sales': None,      # Desactivar migraciones para usar Flyway
+    'users': None,      # Desactivar migraciones para usar Flyway
     # Django system apps - migrations enabled
     # 'admin': None,  # Comentado para permitir migraciones
     # 'auth': None,   # Comentado para permitir migraciones  

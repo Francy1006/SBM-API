@@ -12,8 +12,18 @@ services:
     volumes:
       - ./core:/usr/src/app/core
       - ./franchise:/usr/src/app/franchise
+      - ./catalog:/usr/src/app/catalog
+      - ./accounting:/usr/src/app/accounting
+      - ./support:/usr/src/app/support
+      - ./price:/usr/src/app/price
+      - ./config:/usr/src/app/config
+      - ./fiscal:/usr/src/app/fiscal
+      - ./inventory:/usr/src/app/inventory
+      - ./sales:/usr/src/app/sales
+      - ./users:/usr/src/app/users
       - ./templates:/usr/src/app/templates
       - ./manage.py:/usr/src/app/manage.py
+      - ./.env:/usr/src/app/.env
     networks:
       - sbm-network
 

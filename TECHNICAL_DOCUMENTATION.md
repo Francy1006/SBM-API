@@ -344,6 +344,78 @@ GET    /                         # Página principal con documentación
 - **Crear estado:**
   - `POST /api/franchise-states/`
 
+### Catálogo (Catalog)
+
+- **Listar catálogo (paginado, ordenado por id descendente, búsqueda):**
+  - `GET /api/catalogs/?page=1&search=texto`
+  - Page size: 20 (por página)
+  - Orden: más recientes primero (`id` descendente)
+  - Búsqueda segura (SearchFilter) en los campos: `name`, `description`, `sku`, `code`
+  - Filtros disponibles: `is_visible`, `is_deleted`, `is_confirmed`, `chef_recommendation`
+
+- **Crear elemento del catálogo:**
+  - `POST /api/catalogs/`
+
+- **Solo elementos visibles:**
+  - `GET /api/catalogs/visible/`
+
+- **Recomendaciones del chef:**
+  - `GET /api/catalogs/chef_recommendations/`
+
+### Productos (Product)
+
+- **Listar productos (paginado, ordenado por id descendente, búsqueda):**
+  - `GET /api/products/?page=1&search=texto`
+  - Page size: 20 (por página)
+  - Orden: más recientes primero (`id` descendente)
+  - Búsqueda segura (SearchFilter) en los campos: `description`, `sku`, `code`, `obs`
+  - Filtros disponibles: `is_active`, `is_deleted`, `is_confirmed`, `provider`, `type`, `group`, `category`
+
+- **Crear producto:**
+  - `POST /api/products/`
+
+- **Solo productos activos:**
+  - `GET /api/products/active/`
+
+- **Por proveedor:**
+  - `GET /api/products/by_provider/?provider_id=1`
+
+### Materiales (Material)
+
+- **Listar materiales (paginado, ordenado por id descendente, búsqueda):**
+  - `GET /api/materials/?page=1&search=texto`
+  - Page size: 20 (por página)
+  - Orden: más recientes primero (`id` descendente)
+  - Búsqueda segura (SearchFilter) en los campos: `description`, `sku`, `code`, `obs`
+  - Filtros disponibles: `is_active`, `is_deleted`, `is_confirmed`, `provider`, `type`, `group`, `category`
+
+- **Crear material:**
+  - `POST /api/materials/`
+
+- **Solo materiales activos:**
+  - `GET /api/materials/active/`
+
+- **Por proveedor:**
+  - `GET /api/materials/by_provider/?provider_id=1`
+
+### Servicios (Service)
+
+- **Listar servicios (paginado, ordenado por id descendente, búsqueda):**
+  - `GET /api/services/?page=1&search=texto`
+  - Page size: 20 (por página)
+  - Orden: más recientes primero (`id` descendente)
+  - Búsqueda segura (SearchFilter) en los campos: `description`, `sku`, `code`, `obs`
+  - Filtros disponibles: `is_active`, `is_deleted`, `is_confirmed`, `provider`, `type`, `group`, `category`
+
+- **Crear servicio:**
+  - `POST /api/services/`
+
+- **Solo servicios activos:**
+  - `GET /api/services/active/`
+
+- **Por proveedor:**
+  - `GET /api/services/by_provider/?provider_id=1`
+
 ### Ejemplos de Uso
 
 #### Verificar estado de la API

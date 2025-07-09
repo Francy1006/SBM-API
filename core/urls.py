@@ -40,6 +40,14 @@ urlpatterns = [
     
     # Aplicaciones
     path('api/', include('franchise.urls')),
-    
+    path('api/', include('catalog.urls')),
+    path('api/', include('accounting.urls')),
+    path('api/', include('support.urls')),
+    path('api/', include('price.urls')),
+    path('api/', include('config.urls')),
+    path('api/', include('fiscal.urls')),
+    path('api/', include('inventory.urls')),
+    path('api/', include('sales.urls')),
+    path('api/', include('users.urls')),
     # path('docs/', include_docs_urls(title='SBM API Documentation')),
 ]
