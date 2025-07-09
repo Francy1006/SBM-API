@@ -23,7 +23,9 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
-ALLOWED_HOSTS = str(env("ALLOWED_HOSTS")).split(",")
+ALLOWED_HOSTS = str(env("ALLOWED_HOSTS")).split(",") + [
+    'sbm-manager','sbm_manager', 'localhost', '127.0.0.1', 'sbm-core'
+]
 
 # Application definition
 
@@ -43,13 +45,7 @@ THIRD_APPS = [
 ]
 
 OWN_APPS = [
-    'users',
-    'authz',
-    'documentation',
-    'products',
-    'providers',
-    'pricing',
-    'sales',
+    'franchise',  # Gestión de franquicias
 ]
 
 INSTALLED_APPS = [
@@ -63,13 +59,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'django_filters',
-    'users',
-    'authz',
-    'documentation',
-    'products',
-    'providers',
-    'pricing',
-    'sales',
+    'franchise',  # Gestión de franquicias
 ]
 
 MIDDLEWARE = [
@@ -189,18 +179,16 @@ REST_FRAMEWORK = {
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = True  # Solo para desarrollo
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = str(env("CORS_ALLOWED_ORIGINS")).split(",")
+CORS_ALLOWED_ORIGINS = str(env("CORS_ALLOWED_ORIGINS")).split(",") + [
+    'http://localhost:8080',
+    'http://sbm_manager:8080',
+    'http://sbm-core:8000'
+]
 
 # Disable Django migrations for business apps - using Flyway instead
 # Enable migrations only for Django system apps
 MIGRATION_MODULES = {
-    'users': None,
-    'authz': None,
-    'documentation': None,
-    'products': None,
-    'providers': None,
-    'pricing': None,
-    'sales': None,
+    'franchise': None,  # Desactivar migraciones para usar Flyway
     # Django system apps - migrations enabled
     # 'admin': None,  # Comentado para permitir migraciones
     # 'auth': None,   # Comentado para permitir migraciones  
@@ -216,7 +204,7 @@ JAZZMIN_SETTINGS = {
     "site_logo": None,
     "welcome_sign": "Bienvenido a SBM-API",
     "copyright": "SBM-API Ltd",
-    "search_model": ["auth.User", "products.Catalog"],
+    "search_model": ["auth.User"],
     "user_avatar": None,
     "topmenu_links": [
         {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
@@ -228,14 +216,6 @@ JAZZMIN_SETTINGS = {
         "auth": "fas fa-users-cog",
         "auth.user": "fas fa-user",
         "auth.Group": "fas fa-users",
-        "products": "fas fa-shopping-cart",
-        "products.Catalog": "fas fa-list",
-        "documentation.Instruction": "fas fa-file-alt",
-        "documentation.InstructionType": "fas fa-tags",
-        "products.ItemGroup": "fas fa-layer-group",
-        "products.ItemCategory": "fas fa-th-large",
-        "products.ItemType": "fas fa-cube",
-        "products.Menu": "fas fa-bars",
     },
     "default_icon_parents": "fas fa-chevron-circle-right",
     "default_icon_children": "fas fa-circle",

@@ -38,12 +38,8 @@ urlpatterns = [
     path('api-auth/', include('rest_framework.urls')),
     path('api-token-auth/', auth_views.obtain_auth_token),
     
-    path('api/', include('users.urls')),
-    path('api/', include('authz.urls')),
-    path('api/', include('products.urls')),
-    path('api/', include('providers.urls')),
-    path('api/', include('pricing.urls')),
-    path('api/', include('documentation.urls')),
-    path('api/', include('sales.urls')),
+    # Aplicaciones
+    path('api/', include('franchise.urls')),
+    
     # path('docs/', include_docs_urls(title='SBM API Documentation')),
 ]

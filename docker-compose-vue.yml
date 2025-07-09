@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  app:
+    build: ./sbm-manager
+    container_name: sbm_manager
+    ports:
+      - '8080:8080'
+    volumes:
+      - ./sbm-manager:/app
+      - /app/node_modules
+    command: yarn serve
+    networks:
+      - sbm-network
+    environment:
+      - VUE_APP_API_URL=http://sbm-core:8000
+      - VUE_APP_API_BASE_URL=http://localhost:8082
+
+networks:
+  sbm-network:
+    external: true 

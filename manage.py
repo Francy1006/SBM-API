@@ -16,9 +16,9 @@ def main():
             "forget to activate a virtual environment?"
         ) from exc
     
-    # Cambiar puerto por defecto de 8000 a 8081
+    # Cambiar puerto por defecto de 8000 a 8082
     if len(sys.argv) > 1 and sys.argv[1] == 'runserver' and len(sys.argv) == 2:
-        sys.argv.append('0.0.0.0:8081')
+        sys.argv.append('0.0.0.0:8082')
     
     execute_from_command_line(sys.argv)
 
