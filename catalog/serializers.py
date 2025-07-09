@@ -34,24 +34,22 @@ class CatalogSerializer(serializers.ModelSerializer):
     def get_field_verbose_names(self, obj):
         # Solo incluir los campos listados en fields, excepto field_verbose_names
         field_names = [
+            "code",
             "sku",
             "menu",
+            "name",
+            "description",
             "item_group",
             "category",
             "type",
-            "restriction",
-            "name",
-            "description",
             "chef_recommendation",
             "min_quantity_purchase",
             "rations_quantity",
             "cover_image",
-            "secondary_image",
-            "complementary_image",
-            "image_gallery",
             "is_visible",
             "is_deleted",
             "is_confirmed",
+            "restriction",
         ]
         return {
             field: (
@@ -80,27 +78,26 @@ class CatalogSerializer(serializers.ModelSerializer):
     class Meta:
         model = Catalog
         fields = [
+            "code",
             "sku",
+            "cover_image",
             "menu",
+            "name",
+            "description",
             "item_group",
             "category",
             "type",
-            "restriction",
-            "name",
-            "description",
             "chef_recommendation",
             "min_quantity_purchase",
             "rations_quantity",
-            "cover_image",
-            "secondary_image",
-            "complementary_image",
-            "image_gallery",
             "is_visible",
             "is_deleted",
             "is_confirmed",
+            "restriction",
             "field_verbose_names",
         ]
         read_only_fields = [
+            "code",
             "sku",
             "code",
             "created_at",

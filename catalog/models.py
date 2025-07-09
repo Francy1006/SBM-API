@@ -7,7 +7,7 @@ class Catalog(models.Model):
     Modelo para el catálogo
     """
     id = models.AutoField(primary_key=True)
-    code = models.CharField(max_length=36, unique=True, verbose_name="Código UUID")
+    code = models.CharField(max_length=36, unique=True, verbose_name="CODE")
     sku = models.CharField(max_length=50, verbose_name="SKU")
     menu = models.ForeignKey('Menu', db_column='menu', on_delete=models.CASCADE, related_name='catalogs', verbose_name="Menú")
     item_group = models.ForeignKey('ItemGroup', db_column='item_group', on_delete=models.CASCADE, related_name='catalogs', verbose_name="Grupo")

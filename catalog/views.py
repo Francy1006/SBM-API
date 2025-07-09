@@ -25,8 +25,12 @@ class CatalogViewSet(viewsets.ModelViewSet):
     queryset = Catalog.objects.all()  # type: ignore
     serializer_class = CatalogSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['is_visible', 'is_deleted', 'is_confirmed', 'chef_recommendation', 'item_group']
-    search_fields = ['name', 'description', 'sku', 'code']
+    filterset_fields = [
+        'is_visible', 'is_deleted', 'is_confirmed', 'chef_recommendation', 'item_group', 'menu'
+    ]
+    search_fields = [
+        'name', 'description', 'sku', 'code', 'menu__menu'
+    ]
     ordering_fields = ['id', 'name', 'created_at', 'updated_at']
     ordering = ['-id']
 
@@ -53,6 +57,24 @@ class CatalogViewSet(viewsets.ModelViewSet):
         queryset = self.get_queryset().filter(chef_recommendation=True, is_visible=True)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='foreign-keys-by-code')
+    def foreign_keys_by_code(self, request):
+        code = request.query_params.get('code')
+        if not code:
+            return Response({'detail': 'code param is required.'}, status=400)
+        try:
+            catalog = Catalog.objects.get(code=code)  # type: ignore
+        except Catalog.DoesNotExist:  # type: ignore
+            return Response({'detail': 'Catalog not found.'}, status=404)
+        data = {
+            'menu_id': catalog.menu_id,
+            'item_group_id': catalog.item_group_id,
+            'category_id': catalog.category_id,
+            'type_id': catalog.type_id,
+            'restriction_id': catalog.restriction_id,
+        }
+        return Response(data)
 
 
 class ProductViewSet(viewsets.ModelViewSet):
