@@ -8,7 +8,7 @@ sleep 10
 
 # Run Django system migrations
 echo "Running Django system migrations..."
-python manage.py migrate --run-syncdb
+python manage.py migrate
 
 # Create superuser if it doesn't exist using environment variables
 echo "Checking if superuser exists..."

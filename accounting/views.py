@@ -4,8 +4,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from price.models import Price
 from .models import (
-    Price, PriceFiscalConfiguration, FiscalConfigurationDetail,
+    PriceFiscalConfiguration, FiscalConfigurationDetail,
     FiscalDirective, FiscalDirectiveType, FiscalFormula
 )
 from .serializers import (
@@ -70,7 +71,7 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
     serializer_class = FiscalDirectiveSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_deleted', 'is_confirmed', 'type']
-    search_fields = ['fiscal_directive', 'code', 'obs']
+    search_fields = ['fiscal_directive', 'code', 'obs', 'type__type']
     ordering_fields = ['id', 'fiscal_directive', 'created_at']
     ordering = ['fiscal_directive']
 

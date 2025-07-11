@@ -24,6 +24,7 @@ class CatalogViewSet(viewsets.ModelViewSet):
     """
     queryset = Catalog.objects.all()  # type: ignore
     serializer_class = CatalogSerializer
+    lookup_field = 'code'
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         'is_visible', 'is_deleted', 'is_confirmed', 'chef_recommendation', 'item_group', 'menu'

@@ -1,6 +1,7 @@
 from rest_framework import serializers
+from price.models import Price
 from .models import (
-    Price, PriceFiscalConfiguration, FiscalConfigurationDetail,
+    PriceFiscalConfiguration, FiscalConfigurationDetail,
     FiscalDirective, FiscalDirectiveType, FiscalFormula
 )
 
@@ -62,26 +63,6 @@ class FiscalConfigurationDetailSerializer(serializers.ModelSerializer):
         return {field.name: field.verbose_name for field in obj._meta.fields}
 
 
-class FiscalDirectiveSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo FiscalDirective
-    """
-    field_verbose_names = serializers.SerializerMethodField()
-
-    class Meta:
-        model = FiscalDirective
-        fields = [
-            'id', 'code', 'obs', 'fiscal_directive', 'type', 'percentage',
-            'official_source_url', 'is_deleted', 'is_confirmed', 'created_at',
-            'updated_at', 'confirmed_at', 'deleted_at', 'created_by', 'confirmed_by',
-            'updated_by', 'deleted_by', 'field_verbose_names'
-        ]
-        read_only_fields = ['id', 'code', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
-
-    def get_field_verbose_names(self, obj):
-        return {field.name: field.verbose_name for field in obj._meta.fields}
-
-
 class FiscalDirectiveTypeSerializer(serializers.ModelSerializer):
     """
     Serializer para el modelo FiscalDirectiveType
@@ -92,6 +73,28 @@ class FiscalDirectiveTypeSerializer(serializers.ModelSerializer):
         model = FiscalDirectiveType
         fields = ['id', 'type', 'description', 'field_verbose_names']
         read_only_fields = ['id']
+
+    def get_field_verbose_names(self, obj):
+        return {field.name: field.verbose_name for field in obj._meta.fields}
+
+
+class FiscalDirectiveSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el modelo FiscalDirective
+    """
+    type = serializers.CharField(source='type.type', read_only=True)
+    type_id = serializers.IntegerField(source='type.id', read_only=True)
+    field_verbose_names = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FiscalDirective
+        fields = [
+            'id', 'code', 'obs', 'fiscal_directive', 'type', 'type_id', 'percentage',
+            'official_source_url', 'is_deleted', 'is_confirmed', 'created_at',
+            'updated_at', 'confirmed_at', 'deleted_at', 'created_by', 'confirmed_by',
+            'updated_by', 'deleted_by', 'month', 'end_month', 'year', 'end_year', 'field_verbose_names'
+        ]
+        read_only_fields = ['id', 'code', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
 
     def get_field_verbose_names(self, obj):
         return {field.name: field.verbose_name for field in obj._meta.fields}
