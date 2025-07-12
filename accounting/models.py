@@ -153,3 +153,36 @@ class FiscalFormula(models.Model):
         if not self.id:
             self.id = str(uuid.uuid4())
         super().save(*args, **kwargs)
+
+
+class FiscalDirectiveStats(models.Model):
+    """
+    Modelo para la vista analytics.fiscal_directive_stats
+    """
+    type = models.IntegerField(primary_key=True)
+    type_name = models.CharField(max_length=255, verbose_name="Nombre del Tipo")
+    type_description = models.TextField(verbose_name="Descripción del Tipo")
+    total_directives = models.IntegerField(verbose_name="Total de Directivas")
+    confirmed_directives = models.IntegerField(verbose_name="Directivas Confirmadas")
+    deleted_directives = models.IntegerField(verbose_name="Directivas Eliminadas")
+    pending_directives = models.IntegerField(verbose_name="Directivas Pendientes")
+    avg_percentage = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Porcentaje Promedio")
+    min_percentage = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Porcentaje Mínimo")
+    max_percentage = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Porcentaje Máximo")
+    current_year_directives = models.IntegerField(verbose_name="Directivas del Año Actual")
+    directives_with_month = models.IntegerField(verbose_name="Directivas con Mes")
+    directives_with_end_month = models.IntegerField(verbose_name="Directivas con Mes Fin")
+    directives_with_end_year = models.IntegerField(verbose_name="Directivas con Año Fin")
+    earliest_year = models.IntegerField(verbose_name="Año Más Antiguo")
+    latest_year = models.IntegerField(verbose_name="Año Más Reciente")
+    unique_years = models.IntegerField(verbose_name="Años Únicos")
+    unique_months = models.IntegerField(verbose_name="Meses Únicos")
+
+    class Meta:
+        db_table = '"analytics"."fiscal_directive_stats"'
+        managed = False  # Django no gestiona esta tabla
+        verbose_name = "Estadística de Directiva Fiscal"
+        verbose_name_plural = "Estadísticas de Directivas Fiscales"
+
+    def __str__(self):
+        return f"{self.type_name} - {self.total_directives} directivas"

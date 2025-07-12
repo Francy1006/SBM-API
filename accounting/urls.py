@@ -2,7 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
     PriceViewSet, PriceFiscalConfigurationViewSet, FiscalConfigurationDetailViewSet,
-    FiscalDirectiveViewSet, FiscalDirectiveTypeViewSet, FiscalFormulaViewSet
+    FiscalDirectiveViewSet, FiscalDirectiveTypeViewSet, FiscalFormulaViewSet, FiscalDirectiveStatsViewSet
 )
 
 # Crear el router para los ViewSets
@@ -13,6 +13,7 @@ router.register(r'fiscal-configuration-details', FiscalConfigurationDetailViewSe
 router.register(r'fiscal-directives', FiscalDirectiveViewSet, basename='fiscal-directive')
 router.register(r'fiscal-directive-types', FiscalDirectiveTypeViewSet, basename='fiscal-directive-type')
 router.register(r'fiscal-formulas', FiscalFormulaViewSet, basename='fiscal-formula')
+router.register(r'fiscal-directives-stats', FiscalDirectiveStatsViewSet, basename='fiscal-directive-stats')
 
 app_name = 'accounting'
 
