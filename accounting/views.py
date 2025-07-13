@@ -75,6 +75,13 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
     search_fields = ['fiscal_directive', 'code', 'obs', 'type__type']
     ordering_fields = ['id', 'fiscal_directive', 'created_at']
     ordering = ['fiscal_directive']
+    
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'code'):
+            serializer.save(created_by=self.request.user.code)
+        else:
+            # Fallback si el usuario no tiene código
+            serializer.save(created_by='system')
 
     @action(detail=False, methods=['get'])
     def active(self, request):

@@ -13,7 +13,7 @@ class FiscalDocumentViewSet(viewsets.ModelViewSet):
     """
     ViewSet para el modelo FiscalDocument
     """
-    queryset = FiscalDocument.objects.select_related(
+    queryset = FiscalDocument.objects.select_related( # type: ignore
         'franchise', 'customer', 'created_by'
     ).prefetch_related('items', 'payments')
     serializer_class = FiscalDocumentSerializer
@@ -23,12 +23,15 @@ class FiscalDocumentViewSet(viewsets.ModelViewSet):
     ordering_fields = ['document_number', 'issue_date', 'due_date', 'total_amount']
     ordering = ['-issue_date']
 
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
 
 class FiscalItemViewSet(viewsets.ModelViewSet):
     """
     ViewSet para el modelo FiscalItem
     """
-    queryset = FiscalItem.objects.select_related('fiscal_document', 'catalog_item')
+    queryset = FiscalItem.objects.select_related('fiscal_document', 'catalog_item') # type: ignore
     serializer_class = FiscalItemSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['fiscal_document', 'catalog_item', 'tax_rate']
@@ -41,7 +44,7 @@ class TaxRateViewSet(viewsets.ModelViewSet):
     """
     ViewSet para el modelo TaxRate
     """
-    queryset = TaxRate.objects.select_related('franchise', 'created_by')
+    queryset = TaxRate.objects.select_related('franchise', 'created_by') # type: ignore
     serializer_class = TaxRateSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active', 'franchise', 'created_by']
@@ -49,15 +52,21 @@ class TaxRateViewSet(viewsets.ModelViewSet):
     ordering_fields = ['name', 'rate', 'created_at']
     ordering = ['name']
 
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
 
 class FiscalPaymentViewSet(viewsets.ModelViewSet):
     """
     ViewSet para el modelo FiscalPayment
     """
-    queryset = FiscalPayment.objects.select_related('fiscal_document', 'created_by')
+    queryset = FiscalPayment.objects.select_related('fiscal_document', 'created_by') # type: ignore
     serializer_class = FiscalPaymentSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['payment_method', 'fiscal_document', 'created_by']
     search_fields = ['reference', 'fiscal_document__document_number']
     ordering_fields = ['amount', 'payment_date', 'created_at']
     ordering = ['-payment_date']
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)

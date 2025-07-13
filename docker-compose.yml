@@ -24,6 +24,7 @@ services:
       - ./templates:/usr/src/app/templates
       - ./manage.py:/usr/src/app/manage.py
       - ./.env:/usr/src/app/.env
+      - /etc/localtime:/etc/localtime:ro      # <-- Añadido para zona horaria
     networks:
       - sbm-network
 

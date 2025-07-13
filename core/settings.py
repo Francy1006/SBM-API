@@ -116,7 +116,7 @@ DATABASES = {
         'HOST': env("DB_HOST"),
         'PORT': env("DB_PORT"),
         'OPTIONS': {
-            'options': '-c search_path=ditaly_pasta,sbm_business,public',
+            'options': '-c search_path=sbm_business,ditaly_pasta,analytics,public',
             'connect_timeout': 10,
         },
     }
@@ -167,6 +167,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
+        'users.authentication.CustomTokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
         'rest_framework.authentication.BasicAuthentication',
     ],
@@ -192,7 +193,7 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = str(env("CORS_ALLOWED_ORIGINS")).split(",") + [
     'http://localhost:8080',
     'http://sbm_manager:8080',
-    'http://sbm-core:8000'
+    'http://sbm-core:8082'
 ]
 
 # Disable Django migrations for business apps - using Flyway instead

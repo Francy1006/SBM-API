@@ -1,6 +1,6 @@
 import uuid
 from django.db import models
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User as AuthUser
 
 
 class UserProfile(models.Model):
@@ -16,24 +16,19 @@ class UserProfile(models.Model):
         ('delivery', 'Delivery'),
         ('customer', 'Cliente'),
     ]
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile', verbose_name="Usuario")
+    user = models.OneToOneField(AuthUser, on_delete=models.CASCADE, related_name='profile', verbose_name="Usuario")
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='employee', verbose_name="Rol")
     phone = models.CharField(max_length=20, blank=True, verbose_name="Teléfono")
     address = models.TextField(blank=True, verbose_name="Dirección")
     birth_date = models.DateField(null=True, blank=True, verbose_name="Fecha de Nacimiento")
     hire_date = models.DateField(null=True, blank=True, verbose_name="Fecha de Contratación")
     salary = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, verbose_name="Salario")
-    is_active = models.BooleanField(default=True, verbose_name="Activo")
-    
-    # Relaciones
+    is_active = models.BooleanField(verbose_name="Activo")
     franchise = models.ForeignKey('franchise.Franchise', on_delete=models.CASCADE, related_name='user_profiles', verbose_name="Franquicia")
-    
-    # Campos de auditoría
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Fecha de Actualización")
-    
+
     class Meta:
         db_table = 'user_profile'
         verbose_name = "Perfil de Usuario"
@@ -41,7 +36,9 @@ class UserProfile(models.Model):
         ordering = ['user__username']
 
     def __str__(self):
-        return f"{self.user.get_full_name()} - {self.get_role_display()}"
+        if self.user:
+            return f"{str(self.user)} - {self.role}"
+        return f"Perfil de Usuario {self.pk}"
 
 
 class UserPermission(models.Model):
@@ -51,16 +48,12 @@ class UserPermission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     permission_name = models.CharField(max_length=100, verbose_name="Nombre del Permiso")
     description = models.TextField(blank=True, verbose_name="Descripción")
-    is_active = models.BooleanField(default=True, verbose_name="Activo")
-    
-    # Relaciones
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='custom_permissions', verbose_name="Usuario")
-    
-    # Campos de auditoría
-    created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_user_permissions', verbose_name="Creado por")
+    is_active = models.BooleanField(verbose_name="Activo")
+    user = models.ForeignKey(AuthUser, on_delete=models.CASCADE, related_name='custom_permissions', verbose_name="Usuario")
+    created_by = models.ForeignKey(AuthUser, on_delete=models.CASCADE, related_name='created_user_permissions', verbose_name="Creado por")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Fecha de Actualización")
-    
+
     class Meta:
         db_table = 'user_permission'
         verbose_name = "Permiso de Usuario"
@@ -69,7 +62,8 @@ class UserPermission(models.Model):
         ordering = ['user', 'permission_name']
 
     def __str__(self):
-        return f"{self.user.username} - {self.permission_name}"
+        username = getattr(self.user, 'username', str(self.user))
+        return f"{username} - {self.permission_name}"
 
 
 class UserSession(models.Model):
@@ -82,15 +76,11 @@ class UserSession(models.Model):
     user_agent = models.TextField(verbose_name="User Agent")
     login_time = models.DateTimeField(verbose_name="Hora de Inicio de Sesión")
     logout_time = models.DateTimeField(null=True, blank=True, verbose_name="Hora de Cierre de Sesión")
-    is_active = models.BooleanField(default=True, verbose_name="Sesión Activa")
-    
-    # Relaciones
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sessions', verbose_name="Usuario")
+    is_active = models.BooleanField(verbose_name="Sesión Activa")
+    user = models.ForeignKey(AuthUser, on_delete=models.CASCADE, related_name='sessions', verbose_name="Usuario")
     franchise = models.ForeignKey('franchise.Franchise', on_delete=models.CASCADE, related_name='user_sessions', verbose_name="Franquicia")
-    
-    # Campos de auditoría
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
-    
+
     class Meta:
         db_table = 'user_session'
         verbose_name = "Sesión de Usuario"
@@ -98,7 +88,8 @@ class UserSession(models.Model):
         ordering = ['-login_time']
 
     def __str__(self):
-        return f"{self.user.username} - {self.login_time}"
+        username = getattr(self.user, 'username', str(self.user))
+        return f"{username} - {self.login_time}"
 
 
 class UserActivity(models.Model):
@@ -116,21 +107,16 @@ class UserActivity(models.Model):
         ('import', 'Importar'),
         ('print', 'Imprimir'),
     ]
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     activity_type = models.CharField(max_length=20, choices=ACTIVITY_TYPE_CHOICES, verbose_name="Tipo de Actividad")
     description = models.TextField(verbose_name="Descripción")
     ip_address = models.GenericIPAddressField(verbose_name="Dirección IP")
     user_agent = models.TextField(blank=True, verbose_name="User Agent")
     activity_date = models.DateTimeField(verbose_name="Fecha de Actividad")
-    
-    # Relaciones
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='activities', verbose_name="Usuario")
+    user = models.ForeignKey(AuthUser, on_delete=models.CASCADE, related_name='activities', verbose_name="Usuario")
     franchise = models.ForeignKey('franchise.Franchise', on_delete=models.CASCADE, related_name='user_activities', verbose_name="Franquicia")
-    
-    # Campos de auditoría
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
-    
+
     class Meta:
         db_table = 'user_activity'
         verbose_name = "Actividad de Usuario"
@@ -138,7 +124,8 @@ class UserActivity(models.Model):
         ordering = ['-activity_date']
 
     def __str__(self):
-        return f"{self.user.username} - {self.get_activity_type_display()} - {self.activity_date}"
+        username = getattr(self.user, 'username', str(self.user))
+        return f"{username} - {self.activity_type} - {self.activity_date}"
 
 
 class UserNotification(models.Model):
@@ -152,20 +139,15 @@ class UserNotification(models.Model):
         ('error', 'Error'),
         ('alert', 'Alerta'),
     ]
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=200, verbose_name="Título")
     message = models.TextField(verbose_name="Mensaje")
     notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPE_CHOICES, default='info', verbose_name="Tipo de Notificación")
-    is_read = models.BooleanField(default=False, verbose_name="Leída")
+    is_read = models.BooleanField(verbose_name="Leída")
     read_date = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Lectura")
-    
-    # Relaciones
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications', verbose_name="Usuario")
-    
-    # Campos de auditoría
+    user = models.ForeignKey(AuthUser, on_delete=models.CASCADE, related_name='notifications', verbose_name="Usuario")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
-    
+
     class Meta:
         db_table = 'user_notification'
         verbose_name = "Notificación de Usuario"
@@ -173,4 +155,76 @@ class UserNotification(models.Model):
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.user.username} - {self.title}"
+        username = getattr(self.user, 'username', str(self.user))
+        return f"{username} - {self.title}"
+
+
+# --- MODELO PROPIO DE USUARIO DEL NEGOCIO ---
+class User(models.Model):
+    """
+    Modelo para usuarios del sistema (tabla sbm_business.user)
+    """
+    id = models.AutoField(primary_key=True)
+    code = models.CharField(max_length=36, unique=True, verbose_name="Código UUID")
+    type = models.IntegerField(verbose_name="Tipo de Usuario")
+    google_id = models.CharField(max_length=255, unique=True, verbose_name="Google ID")
+    mail = models.EmailField(unique=True, verbose_name="Email")
+    phone = models.BigIntegerField(verbose_name="Teléfono")
+    name = models.CharField(max_length=255, verbose_name="Nombre")
+    last_name = models.CharField(max_length=255, verbose_name="Apellido")
+    is_active = models.BooleanField(default=True, verbose_name="Activo")  # type: ignore
+    is_deleted = models.BooleanField(default=False, verbose_name="Eliminado")  # type: ignore
+    is_confirmed = models.BooleanField(default=False, verbose_name="Confirmado")  # type: ignore
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    updated_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Actualización")
+    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Confirmación")
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Eliminación")
+    deleted_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Eliminado Por")
+    log = models.TextField(default="init;", verbose_name="Log")
+    version = models.IntegerField(default=1, verbose_name="Versión")  # type: ignore
+
+    class Meta:
+        db_table = 'user'
+        verbose_name = "Usuario"
+        verbose_name_plural = "Usuarios"
+        ordering = ['name', 'last_name']
+
+    def __str__(self):
+        return f"{self.name} {self.last_name}"
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = str(uuid.uuid4())
+        super().save(*args, **kwargs)
+
+    @property
+    def is_authenticated(self):
+        return True
+
+
+class UserToken(models.Model):
+    """
+    Modelo para tokens de usuario (tabla sbm_business.user_token)
+    """
+    id = models.CharField(max_length=36, primary_key=True, verbose_name="Token UUID")
+    user_id = models.CharField(max_length=36, verbose_name="ID de Usuario")
+    token = models.TextField(verbose_name="Token")
+    ip_address = models.CharField(max_length=45, verbose_name="Dirección IP")
+    user_agent = models.TextField(null=True, blank=True, verbose_name="User Agent")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    expires_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Expiración")
+    revoked_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Revocación")
+
+    class Meta:
+        db_table = 'user_token'
+        verbose_name = "Token de Usuario"
+        verbose_name_plural = "Tokens de Usuario"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Token {self.id} - {self.user_id}"
+
+    def save(self, *args, **kwargs):
+        if not self.id:
+            self.id = str(uuid.uuid4())
+        super().save(*args, **kwargs)

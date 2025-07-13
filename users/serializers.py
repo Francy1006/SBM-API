@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import UserProfile, UserPermission, UserSession, UserActivity, UserNotification
+from .models import UserProfile, UserPermission, UserSession, UserActivity, UserNotification, User, UserToken
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
@@ -163,4 +163,61 @@ class UserNotificationSerializer(serializers.ModelSerializer):
         return verbose_names
 
     def get_user_name(self, obj):
-        return obj.user.get_full_name() if obj.user else None 
+        return obj.user.get_full_name() if obj.user else None
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el modelo User (sbm_business.user)
+    """
+    field_verbose_names = serializers.SerializerMethodField()
+    full_name = serializers.SerializerMethodField(help_text="Nombre Completo")
+
+    class Meta:
+        model = User
+        fields = [
+            'id', 'code', 'type', 'google_id', 'mail', 'phone', 'name', 'last_name',
+            'is_active', 'is_deleted', 'is_confirmed', 'created_at', 'updated_at',
+            'confirmed_at', 'deleted_at', 'deleted_by', 'log', 'version',
+            'field_verbose_names', 'full_name'
+        ]
+        read_only_fields = ['id', 'code', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at', 'log', 'version']
+
+    def get_field_verbose_names(self, obj):
+        verbose_names = {field.name: field.verbose_name for field in obj._meta.fields}
+        verbose_names.update({
+            'full_name': 'Nombre Completo'
+        })
+        return verbose_names
+
+    def get_full_name(self, obj):
+        return f"{obj.name} {obj.last_name}"
+
+
+class UserTokenSerializer(serializers.ModelSerializer):
+    """
+    Serializer para el modelo UserToken (sbm_business.user_token)
+    """
+    field_verbose_names = serializers.SerializerMethodField()
+    
+    # Campos relacionados
+    user_name = serializers.SerializerMethodField(help_text="Usuario")
+
+    class Meta:
+        model = UserToken
+        fields = [
+            'id', 'user_id', 'token', 'ip_address', 'user_agent',
+            'created_at', 'expires_at', 'revoked_at',
+            'field_verbose_names', 'user_name'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    def get_field_verbose_names(self, obj):
+        verbose_names = {field.name: field.verbose_name for field in obj._meta.fields}
+        verbose_names.update({
+            'user_name': 'Usuario'
+        })
+        return verbose_names
+
+    def get_user_name(self, obj):
+        return f"User {obj.user_id}" 
