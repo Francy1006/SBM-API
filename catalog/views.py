@@ -280,6 +280,12 @@ class ProviderViewSet(viewsets.ModelViewSet):
     ordering_fields = ['id', 'provider', 'created_at']
     ordering = ['provider']
 
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'code'):
+            serializer.save(created_by=self.request.user.code)
+        else:
+            serializer.save(created_by='system')
+
     @action(detail=False, methods=['get'])
     def active(self, request):
         """

@@ -377,11 +377,81 @@ class InstructionSerializer(serializers.ModelSerializer):
 
 
 class ProviderSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo Provider
-    """
+    field_verbose_names = serializers.SerializerMethodField()
+    provider_type = serializers.SerializerMethodField()
 
-    # Elimino el SerializerMethodField y el método get_field_verbose_names
+    def get_field_verbose_names(self, obj):
+        field_names = [
+            "provider", "type", "provider_type", "rating", "obs_provider", "contact_name", "contact_mail",
+            "contact_phone", "contact_phone2", "website_url", "obs_contact", "company_name",
+            "company_rut", "company_activity", "legal_representative", "billing_address",
+            "billing_mail", "billing_phone", "company_bank", "bank_account_type",
+            "bank_account_number", "bank_account_mail", "dispatch_address", "dispatch_maps_location",
+            "obs_dispatch", "dispatch_district", "dispatch_region", "is_active", "is_deleted",
+            "is_confirmed", "created_at", "updated_at", "confirmed_at", "deleted_at", "created_by",
+            "confirmed_by", "updated_by", "deleted_by", "code", "id"
+        ]
+        # Mapeo manual para campos calculados o especiales
+        manual_verbose = {
+            "provider_type": "Tipo Proveedor",
+            "type": "Tipo (ID)",
+            "provider": "Proveedor",
+            "obs_provider": "Observaciones del Proveedor",
+            "obs_contact": "Observaciones de Contacto",
+            "company_name": "Nombre de la Empresa",
+            "company_rut": "RUT de la Empresa",
+            "company_activity": "Actividad de la Empresa",
+            "legal_representative": "Representante Legal",
+            "billing_address": "Dirección de Facturación",
+            "billing_mail": "Email de Facturación",
+            "billing_phone": "Teléfono de Facturación",
+            "company_bank": "Banco de la Empresa",
+            "bank_account_type": "Tipo de Cuenta Bancaria",
+            "bank_account_number": "Número de Cuenta Bancaria",
+            "bank_account_mail": "Email de Cuenta Bancaria",
+            "dispatch_address": "Dirección de Despacho",
+            "dispatch_maps_location": "Ubicación en Maps",
+            "obs_dispatch": "Observaciones de Despacho",
+            "dispatch_district": "Comuna de Despacho",
+            "dispatch_region": "Región de Despacho",
+            "is_active": "Está Activo",
+            "is_deleted": "Está Eliminado",
+            "is_confirmed": "Está Confirmado",
+            "created_at": "Fecha de Creación",
+            "updated_at": "Fecha de Actualización",
+            "confirmed_at": "Fecha de Confirmación",
+            "deleted_at": "Fecha de Eliminación",
+            "created_by": "Creado Por",
+            "confirmed_by": "Confirmado Por",
+            "updated_by": "Actualizado Por",
+            "deleted_by": "Eliminado Por",
+            "code": "Código UUID",
+            "id": "ID",
+            "rating": "Calificación",
+            "contact_name": "Nombre de Contacto",
+            "contact_mail": "Email de Contacto",
+            "contact_phone": "Teléfono de Contacto",
+            "contact_phone2": "Teléfono de Contacto 2",
+            "website_url": "URL del Sitio Web"
+        }
+        result = {}
+        for field in field_names:
+            if field in manual_verbose:
+                result[field] = manual_verbose[field]
+            elif hasattr(obj._meta, "get_field") and field in [f.name for f in obj._meta.fields]:
+                result[field] = obj._meta.get_field(field).verbose_name
+            else:
+                # Capitaliza y reemplaza guiones bajos por espacios para campos no mapeados
+                result[field] = field.replace('_', ' ').capitalize()
+        return result
+
+    def get_provider_type(self, obj):
+        from .models import ProviderType
+        try:
+            provider_type_obj = ProviderType.objects.get(id=obj.type) # type: ignore
+            return provider_type_obj.type
+        except ProviderType.DoesNotExist: # type: ignore
+            return None
 
     class Meta:
         model = Provider
@@ -390,6 +460,7 @@ class ProviderSerializer(serializers.ModelSerializer):
             "code",
             "provider",
             "type",
+            "provider_type",
             "rating",
             "obs_provider",
             "contact_name",
@@ -425,6 +496,7 @@ class ProviderSerializer(serializers.ModelSerializer):
             "confirmed_by",
             "updated_by",
             "deleted_by",
+            "field_verbose_names",
         ]
         read_only_fields = [
             "id",
@@ -433,6 +505,10 @@ class ProviderSerializer(serializers.ModelSerializer):
             "updated_at",
             "confirmed_at",
             "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
         ]
 
 

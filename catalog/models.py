@@ -477,17 +477,17 @@ class Region(models.Model):
 
 class District(models.Model):
     """
-    Modelo para distritos
+    Modelo para comunas
     """
     id = models.AutoField(primary_key=True)
-    district = models.CharField(max_length=255, verbose_name="Distrito")
+    district = models.CharField(max_length=255, verbose_name="Comuna")
     region = models.IntegerField(verbose_name="Región")
     description = models.TextField(verbose_name="Descripción")
 
     class Meta:
         db_table = 'district'
-        verbose_name = "Distrito"
-        verbose_name_plural = "Distritos"
+        verbose_name = "Comuna"
+        verbose_name_plural = "Comunas"
         ordering = ['district']
 
     def __str__(self):

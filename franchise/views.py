@@ -331,7 +331,7 @@ class FranchiseConfigurationDetailViewSet(viewsets.ModelViewSet):
             return Response({'error': 'franchise_code es requerido'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Filtrar configuraciones de la franquicia por código
-        config_codes = FranchiseConfiguration.objects.filter(
+        config_codes = FranchiseConfiguration.objects.filter( # type: ignore
             franchise=franchise_code
         ).values_list('code', flat=True)
         
@@ -355,13 +355,13 @@ class FranchiseConfigurationDetailViewSet(viewsets.ModelViewSet):
         
         # Obtener el código de la franquicia por ID
         try:
-            franchise = Franchise.objects.get(id=franchise_id)
+            franchise = Franchise.objects.get(id=franchise_id) # type: ignore
             franchise_code = franchise.code
-        except Franchise.DoesNotExist:
+        except Franchise.DoesNotExist: # type: ignore
             return Response({'error': 'Franquicia no encontrada'}, status=status.HTTP_404_NOT_FOUND)
         
         # Filtrar configuraciones de la franquicia por código
-        config_codes = FranchiseConfiguration.objects.filter(
+        config_codes = FranchiseConfiguration.objects.filter( # type: ignore
             franchise=franchise_code
         ).values_list('code', flat=True)
         
@@ -381,7 +381,7 @@ class FranchiseConfigurationDetailViewSet(viewsets.ModelViewSet):
         """
         try:
             instance = self.get_object()
-        except FranchiseConfigurationDetail.DoesNotExist:
+        except FranchiseConfigurationDetail.DoesNotExist: # type: ignore
             return Response(
                 {'error': 'Detalle de configuración no encontrado'}, 
                 status=status.HTTP_404_NOT_FOUND
