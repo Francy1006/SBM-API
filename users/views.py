@@ -20,6 +20,7 @@ from .serializers import (
     UserNotificationSerializer
 )
 from .authentication import CustomTokenAuthentication
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,18 @@ class GoogleAuthView(View):
             if not id_token_google:
                 return JsonResponse({'error': 'id_token es requerido'}, status=400)
 
-            client_id = "815958124165-c4jtlvju3ngm68ecpgqf3k208tqd984f.apps.googleusercontent.com"
+            # --- MODO DESARROLLO: omitir Google Auth y devolver usuario de prueba ---
+            if getattr(settings, 'DJANGO_ENV', 'development') == 'development':
+                return JsonResponse({
+                    'uuid': getattr(settings, 'MOCK_USER_UUID', 'mock-uuid'),
+                    'email': getattr(settings, 'MOCK_USER_EMAIL', 'mock@example.com'),
+                    'name': getattr(settings, 'MOCK_USER_NAME', 'MOCKUSER'),
+                    'token': getattr(settings, 'MOCK_USER_TOKEN', 'mock-token')
+                })
+            # --- FIN MODO DESARROLLO ---
+
+            # --- MODO PRODUCCIÓN: validar Google Auth normalmente ---
+            client_id = settings.GOOGLE_CLIENT_ID
 
             # LOG HORA DEL SISTEMA
             logger.warning(">>> Hora del sistema (timezone.now()): %s", timezone.now())

@@ -1,10 +1,11 @@
 from django.shortcuts import render
 from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Warehouse, InventoryItem, InventoryMovement, InventoryCount, InventoryCountItem
+from .models import Warehouse, InventoryItem, InventoryMovement, InventoryCount, InventoryCountItem, Package, PackageType, TransportType, MeasureUnit
 from .serializers import (
     WarehouseSerializer, InventoryItemSerializer, InventoryMovementSerializer,
-    InventoryCountSerializer, InventoryCountItemSerializer
+    InventoryCountSerializer, InventoryCountItemSerializer,
+    PackageSerializer, PackageTypeSerializer, TransportTypeSerializer, MeasureUnitSerializer
 )
 
 # Create your views here.
@@ -72,3 +73,40 @@ class InventoryCountItemViewSet(viewsets.ModelViewSet):
     search_fields = ['notes', 'catalog_item__name', 'inventory_count__count_number']
     ordering_fields = ['expected_quantity', 'counted_quantity', 'difference', 'created_at']
     ordering = ['inventory_count', 'catalog_item']
+
+
+class PackageViewSet(viewsets.ModelViewSet):
+    queryset = Package.objects.all()
+    serializer_class = PackageSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['package_type', 'transport_type', 'measure_unit', 'is_deleted', 'is_confirmed']
+    search_fields = ['description']
+    ordering_fields = ['id', 'description', 'created_at']
+    ordering = ['id']
+
+class PackageTypeViewSet(viewsets.ModelViewSet):
+    queryset = PackageType.objects.all()
+    serializer_class = PackageTypeSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['type']
+    search_fields = ['type', 'description']
+    ordering_fields = ['id', 'type']
+    ordering = ['type']
+
+class TransportTypeViewSet(viewsets.ModelViewSet):
+    queryset = TransportType.objects.all()
+    serializer_class = TransportTypeSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['type']
+    search_fields = ['type', 'description']
+    ordering_fields = ['id', 'type']
+    ordering = ['type']
+
+class MeasureUnitViewSet(viewsets.ModelViewSet):
+    queryset = MeasureUnit.objects.all()
+    serializer_class = MeasureUnitSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['measure_unit']
+    search_fields = ['measure_unit', 'description']
+    ordering_fields = ['id', 'measure_unit']
+    ordering = ['measure_unit']

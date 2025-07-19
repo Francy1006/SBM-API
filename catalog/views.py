@@ -9,11 +9,13 @@ from .models import (
     Menu, ItemGroup, ItemCategory, ItemType, Restriction, Instruction,
     Provider, ProviderType, Bank, BankAccountType, District, Region
 )
+from price.models import Price
 from .serializers import (
     CatalogSerializer, ProductSerializer, MaterialSerializer, ServiceSerializer,
     MenuSerializer, ItemGroupSerializer, ItemCategorySerializer, ItemTypeSerializer,
     RestrictionSerializer, InstructionSerializer, ProviderSerializer,
-    ProviderTypeSerializer, BankSerializer, BankAccountTypeSerializer, DistrictSerializer, RegionSerializer
+    ProviderTypeSerializer, BankSerializer, BankAccountTypeSerializer, DistrictSerializer, RegionSerializer,
+    ProductManageSerializer
 )
 
 
@@ -86,10 +88,64 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()  # type: ignore
     serializer_class = ProductSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['is_active', 'is_deleted', 'is_confirmed', 'provider', 'type', 'group', 'category']
+    filterset_fields = ['is_active', 'is_deleted', 'is_confirmed', 'provider', 'type', 'item_group', 'category']
     search_fields = ['description', 'sku', 'code', 'obs']
     ordering_fields = ['id', 'description', 'created_at', 'updated_at']
     ordering = ['-id']
+
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'code'):
+            serializer.save(created_by=self.request.user.code)
+        else:
+            serializer.save(created_by='system')
+
+    @action(detail=False, methods=['get'], url_path='product-list')
+    def product_list(self, request):
+        """
+        Endpoint personalizado para obtener productos con joins y campos extendidos
+        """
+        products = Product._default_manager.all()
+        price_map = {p.code: p for p in Price._default_manager.filter(code__in=[prod.price for prod in products])}
+        type_map = {t.id: t for t in ItemType._default_manager.filter(id__in=[prod.type for prod in products])}
+        group_map = {g.id: g for g in ItemGroup._default_manager.filter(id__in=[prod.item_group for prod in products])}
+        category_map = {c.id: c for c in ItemCategory._default_manager.filter(id__in=[prod.category for prod in products])}
+
+        data = []
+        for prod in products:
+            price_obj = price_map.get(prod.price)
+            type_obj = type_map.get(prod.type)
+            group_obj = group_map.get(prod.item_group)
+            category_obj = category_map.get(prod.category)
+            data.append({
+                'code': prod.code,
+                'sku': prod.sku,
+                'description': prod.description,
+                'base_net_amount': price_obj.base_net_amount if price_obj else None,
+                'obs': prod.obs,
+                'package_unit': prod.package_unit,
+                'min_package_purchase': prod.min_package_purchase,
+                'provider': prod.provider,
+                'type': prod.type,
+                'type_name': type_obj.type if type_obj else None,
+                'item_group': prod.item_group,
+                'group_name': group_obj.group_name if group_obj else None,
+                'category': prod.category,
+                'category_name': category_obj.category if category_obj else None,
+                'url': prod.url,
+                'package': prod.package,
+                'package_description': None,
+                'is_active': prod.is_active,
+                'is_deleted': prod.is_deleted,
+                'is_confirmed': prod.is_confirmed,
+                'created_at': prod.created_at,
+            })
+        page = self.paginate_queryset(data)
+        verbose_names = ProductManageSerializer.get_verbose_names()
+        if page is not None:
+            serializer = ProductManageSerializer(page, many=True)
+            return self.get_paginated_response({'results': serializer.data, 'verbose_names': verbose_names})
+        serializer = ProductManageSerializer(data, many=True)
+        return Response({'results': serializer.data, 'verbose_names': verbose_names})
 
     @action(detail=False, methods=['get'])
     def active(self, request):

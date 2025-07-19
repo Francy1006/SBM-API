@@ -165,3 +165,80 @@ class InventoryCountItem(models.Model):
 
     def __str__(self):
         return f"{self.catalog_item.name} - Esperado: {self.expected_quantity}, Contado: {self.counted_quantity}"
+
+
+class PackageType(models.Model):
+    id = models.AutoField(primary_key=True)
+    type = models.CharField(max_length=50, verbose_name="Tipo de Paquete")
+    description = models.TextField(verbose_name="Descripción")
+
+    class Meta:
+        db_table = 'package_type'
+        verbose_name = "Tipo de Paquete"
+        verbose_name_plural = "Tipos de Paquete"
+        ordering = ['type']
+
+    def __str__(self):
+        return self.type
+
+
+class TransportType(models.Model):
+    id = models.AutoField(primary_key=True)
+    type = models.CharField(max_length=50, verbose_name="Tipo de Transporte")
+    description = models.TextField(verbose_name="Descripción")
+
+    class Meta:
+        db_table = 'transport_type'
+        verbose_name = "Tipo de Transporte"
+        verbose_name_plural = "Tipos de Transporte"
+        ordering = ['type']
+
+    def __str__(self):
+        return self.type
+
+
+class MeasureUnit(models.Model):
+    id = models.AutoField(primary_key=True)
+    measure_unit = models.CharField(max_length=50, verbose_name="Unidad de Medida")
+    description = models.TextField(verbose_name="Descripción")
+
+    class Meta:
+        db_table = 'measure_unit'
+        verbose_name = "Unidad de Medida"
+        verbose_name_plural = "Unidades de Medida"
+        ordering = ['measure_unit']
+
+    def __str__(self):
+        return self.measure_unit
+
+
+class Package(models.Model):
+    id = models.AutoField(primary_key=True)
+    description = models.TextField(verbose_name="Descripción")
+    package_type = models.ForeignKey(PackageType, on_delete=models.CASCADE, db_column='package_type', verbose_name="Tipo de Paquete")
+    transport_type = models.ForeignKey(TransportType, on_delete=models.CASCADE, db_column='transport_type', verbose_name="Tipo de Transporte")
+    size = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Tamaño")
+    weight = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Peso")
+    measure_unit = models.ForeignKey(MeasureUnit, on_delete=models.CASCADE, db_column='measure_unit', verbose_name="Unidad de Medida")
+    quantity_unit = models.IntegerField(default=1, verbose_name="Cantidad de Unidades")
+    storage_instructions = models.CharField(max_length=36, verbose_name="Instrucciones de Almacenaje")
+    transport_instructions = models.CharField(max_length=36, verbose_name="Instrucciones de Transporte")
+    is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
+    is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    updated_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Actualización")
+    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Confirmación")
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Eliminación")
+    created_by = models.CharField(max_length=36, verbose_name="Creado Por")
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Confirmado Por")
+    updated_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Actualizado Por")
+    deleted_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Eliminado Por")
+
+    class Meta:
+        db_table = 'package'
+        verbose_name = "Paquete"
+        verbose_name_plural = "Paquetes"
+        ordering = ['id']
+
+    def __str__(self):
+        return f"{self.description} (ID: {self.id})"

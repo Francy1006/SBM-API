@@ -709,3 +709,49 @@ docker-compose exec api python manage.py migrate --run-syncdb
 - `auth_user` - Usuarios del sistema Django
 - `auth_user_groups` - Grupos de usuarios
 - `auth_user_user_permissions` - Permisos de usuarios
+
+## Endpoint: /api/franchise-configuration-details/ditaly-pasta-configurations/
+
+**Método:** GET
+
+**Descripción:**
+Devuelve todos los detalles de configuración de franquicia (FranchiseConfigurationDetail) donde:
+- El tipo de configuración (`type_id`) es 2 (por ejemplo, configuraciones de precio)
+- La configuración (`configuration`) pertenece a una configuración de franquicia (FranchiseConfiguration) asociada a la franquicia con `id = 1` (fijo, por seguridad)
+
+**Parámetros:**
+- No requiere parámetros. El filtro es interno y fijo.
+
+**Respuesta:**
+Lista de objetos FranchiseConfigurationDetail serializados, por ejemplo:
+```json
+[
+  {
+    "id": 123,
+    "code": "...",
+    "detail": "...",
+    "description": "...",
+    "type": 2,
+    "configuration": "...",
+    "index": 1,
+    "var": "...",
+    "value": 100.00,
+    "formula": "...",
+    "is_deleted": false,
+    "is_confirmed": true,
+    "created_at": "2024-07-14T12:00:00Z",
+    "updated_at": null,
+    "confirmed_at": null,
+    "deleted_at": null,
+    "created_by": "...",
+    "confirmed_by": null,
+    "updated_by": null,
+    "deleted_by": null
+  },
+  ...
+]
+```
+
+**Notas:**
+- No depende del usuario autenticado ni acepta parámetros externos.
+- Solo expone información de la franquicia con id=1 y tipo de configuración 2.

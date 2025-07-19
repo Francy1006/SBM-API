@@ -154,7 +154,6 @@ class FranchiseConfigurationDetail(models.Model):
     index = models.IntegerField(default=1, verbose_name="Índice") # type: ignore
     var = models.CharField(max_length=50, verbose_name="Variable")
     value = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Valor")
-    formula = models.CharField(max_length=36, verbose_name="Fórmula")
     is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
     is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")

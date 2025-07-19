@@ -14,6 +14,10 @@ from .serializers import (
     FranchiseConfigurationDetailSerializer
 )
 from django.db import models
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.db import connection
 
 # Create your views here.
 
@@ -265,6 +269,31 @@ class FranchiseConfigurationViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
 
+class FranchiseConfigurationView(APIView):
+    """
+    Endpoint que retorna detail, description, var y value de franchise_configuration_detail para una franquicia dada y type=2.
+    """
+    def get(self, request):
+        franchise = request.query_params.get('franchise')
+        if not franchise:
+            return Response({'error': 'El parámetro franchise es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                SELECT fcd.detail, fcd.description, fcd.var, fcd.value
+                FROM sbm_business.franchise f
+                LEFT JOIN ditaly_pasta.franchise_configuration fc
+                  ON f.code = fc.franchise
+                LEFT JOIN ditaly_pasta.franchise_configuration_detail fcd
+                  ON fc.code = fcd.configuration
+                WHERE f.code = %s AND fcd.type = 2
+            ''', [franchise])
+            results = cursor.fetchall()
+        data = [
+            {'detail': row[0], 'description': row[1], 'var': row[2], 'value': row[3]} for row in results
+        ]
+        return Response(data)
+
+
 class FranchiseConfigurationDetailViewSet(viewsets.ModelViewSet):
     """
     ViewSet para el modelo FranchiseConfigurationDetail
@@ -371,6 +400,33 @@ class FranchiseConfigurationDetailViewSet(viewsets.ModelViewSet):
             type_id=2
         ).order_by('id')
         
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'], url_path='ditaly-pasta-configurations')
+    def ditaly_pasta_configurations(self, request):
+        """
+        Endpoint para obtener todos los FranchiseConfigurationDetail donde type_id=2 y configuration pertenece a configuraciones de la franquicia id=1
+        """
+        from franchise.models import FranchiseConfiguration, Franchise
+        # 1. Obtener el código de la franquicia con id=1
+        try:
+            franchise = Franchise._default_manager.get(id=1)
+            franchise_code = franchise.code
+        except Franchise._default_manager.model.DoesNotExist:
+            return Response({'error': 'Franquicia id=1 no encontrada.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Configuraciones de esa franquicia
+        config_codes = FranchiseConfiguration._default_manager.filter(
+            franchise=franchise_code
+        ).values_list('code', flat=True)
+
+        # 3. Detalles de configuración de esas configuraciones y type_id=2
+        queryset = self.get_queryset().filter(
+            configuration__in=config_codes,
+            type_id=2
+        )
+
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 

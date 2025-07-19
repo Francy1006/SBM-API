@@ -90,7 +90,7 @@ class FranchiseConfigurationDetailSerializer(serializers.ModelSerializer):
         model = FranchiseConfigurationDetail
         fields = [
             'id', 'code', 'detail', 'description', 'type', 'type_name', 'configuration',
-            'index', 'var', 'value', 'formula', 'is_deleted', 'is_confirmed', 'created_at', 'updated_at',
+            'index', 'var', 'value', 'is_deleted', 'is_confirmed', 'created_at', 'updated_at',
             'confirmed_at', 'deleted_at', 'created_by', 'confirmed_by', 'updated_by',
             'deleted_by', 'field_verbose_names'
         ]

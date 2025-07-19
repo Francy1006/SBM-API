@@ -8,23 +8,17 @@ class Price(models.Model):
     Modelo para precios
     """
     id = models.AutoField(primary_key=True)
-    code = models.CharField(max_length=36, unique=True, verbose_name="Código UUID")
-    net_amount = models.IntegerField(default=0, verbose_name="Monto Neto")  # type: ignore
-    gross_amount = models.IntegerField(default=0, verbose_name="Monto Bruto")  # type: ignore
-    iva_amount = models.IntegerField(default=0, verbose_name="Monto IVA")  # type: ignore
-    retention_amount = models.IntegerField(default=0, verbose_name="Monto Retención")  # type: ignore
-    price_fiscal_configuration = models.CharField(max_length=36, verbose_name="Configuración Fiscal")
-    is_active = models.BooleanField(default=True, verbose_name="Está Activo")  # type: ignore
+    code = models.CharField(max_length=36, unique=True, null=True, verbose_name="Código UUID")
+    base_net_amount = models.IntegerField(default=0, verbose_name="Valor Neto Base")
+    net_amount = models.IntegerField(default=0, verbose_name="Monto Neto")
+    gross_amount = models.IntegerField(default=0, verbose_name="Monto Bruto")
+    iva_amount = models.IntegerField(default=0, verbose_name="Monto IVA")
+    retention_amount = models.IntegerField(default=0, verbose_name="Monto Retención")
+    price_configuration = models.CharField(max_length=36, verbose_name="Configuración de Precio")
     is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
     is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
-    updated_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Actualización")
-    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Confirmación")
-    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Eliminación")
     created_by = models.CharField(max_length=36, verbose_name="Creado Por")
-    confirmed_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Confirmado Por")
-    updated_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Actualizado Por")
-    deleted_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Eliminado Por")
 
     class Meta:
         db_table = 'price'
@@ -158,3 +152,30 @@ class PriceHistory(models.Model):
 
     def __str__(self):
         return f"{self.price_item} - ${self.old_price} → ${self.new_price}"
+
+
+class PriceConfiguration(models.Model):
+    id = models.AutoField(primary_key=True)
+    code = models.CharField(max_length=36, null=True, unique=True, verbose_name="Código UUID")
+    price_configuration = models.CharField(max_length=50, unique=True, verbose_name="Configuración de Precio")
+    franchise_configuration = models.CharField(max_length=36, verbose_name="Configuración de Franquicia")
+    variable_formula = models.CharField(max_length=36, verbose_name="Fórmula de Variable")
+    is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
+    is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    updated_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Actualización")
+    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Confirmación")
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Eliminación")
+    created_by = models.CharField(max_length=36, verbose_name="Creado Por")
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Confirmado Por")
+    updated_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Actualizado Por")
+    deleted_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Eliminado Por")
+
+    class Meta:
+        db_table = 'price_configuration'
+        verbose_name = "Configuración de Precio"
+        verbose_name_plural = "Configuraciones de Precio"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.price_configuration

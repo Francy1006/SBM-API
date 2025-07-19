@@ -17,6 +17,10 @@ from .models import (
     District,
     Region,
 )
+from price.models import Price
+from django.db import transaction
+import uuid
+from django.utils import timezone
 
 
 class CatalogSerializer(serializers.ModelSerializer):
@@ -114,12 +118,12 @@ class ProductSerializer(serializers.ModelSerializer):
     """
     Serializer para el modelo Product
     """
+    field_verbose_names = serializers.SerializerMethodField()
+    net_amount = serializers.SerializerMethodField()
+    price_data = serializers.DictField(write_only=True, required=True)
 
-    # Elimino el SerializerMethodField y el método get_field_verbose_names
-
-    class Meta:
-        model = Product
-        fields = [
+    def get_field_verbose_names(self, obj):
+        field_names = [
             "id",
             "code",
             "sku",
@@ -130,7 +134,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "price",
             "provider",
             "type",
-            "group",
+            "item_group",
             "category",
             "url",
             "package",
@@ -147,6 +151,105 @@ class ProductSerializer(serializers.ModelSerializer):
             "deleted_by",
             "log",
             "version",
+            "net_amount",
+        ]
+        verbose = {
+            "net_amount": "Valor BASE NETO",
+        }
+        result = {
+            field: (
+                verbose[field] if field in verbose else (
+                    obj._meta.get_field(field).verbose_name
+                    if hasattr(obj._meta, "get_field") and field in [f.name for f in obj._meta.fields]
+                    else field
+                )
+            )
+            for field in field_names
+        }
+        return result
+
+    def get_net_amount(self, obj):
+        from price.models import Price
+        try:
+            price_obj = Price._default_manager.get(code=obj.price)
+            return price_obj.net_amount
+        except Exception:
+            return None
+
+    def create(self, validated_data):
+        request = self.context.get('request', None)
+        price_data = validated_data.pop('price_data', None)
+        if not price_data:
+            raise serializers.ValidationError({'price_data': 'Este campo es requerido.'})
+        # Validar que solo estén los campos permitidos
+        allowed_fields = {'base_net_amount', 'price_configuration'}
+        if set(price_data.keys()) != allowed_fields:
+            raise serializers.ValidationError({'price_data': f'Solo se permiten los campos: {allowed_fields}.'})
+        # Validar que ambos campos sean obligatorios y no nulos
+        if price_data.get('base_net_amount') in [None, '']:
+            raise serializers.ValidationError({'price_data': {'base_net_amount': 'Este campo es obligatorio.'}})
+        if price_data.get('price_configuration') in [None, '']:
+            raise serializers.ValidationError({'price_data': {'price_configuration': 'Este campo es obligatorio.'}})
+        validated_data.pop('price', None)
+        validated_data.pop('created_by', None)
+        user_code = getattr(getattr(request, 'user', None), 'code', 'system')
+        now = timezone.now()
+        from price.models import Price
+        with transaction.atomic():
+            price_code = str(uuid.uuid4())
+            price_obj = Price._default_manager.create(
+                code=price_code,
+                base_net_amount=price_data['base_net_amount'],
+                net_amount=0,
+                gross_amount=0,
+                iva_amount=0,
+                retention_amount=0,
+                price_configuration=price_data['price_configuration'],
+                created_by=user_code,
+                created_at=now
+            )
+            product = Product._default_manager.create(
+                **validated_data,
+                price=price_obj.code,
+                created_by=user_code,
+                created_at=now
+            )
+        return product
+
+    class Meta:
+        model = Product
+        fields = [
+            "id",
+            "code",
+            "sku",
+            "description",
+            "obs",
+            "package_unit",
+            "min_package_purchase",
+            # "price",  # No permitir en input, pero sí en output
+            "provider",
+            "type",
+            "item_group",
+            "category",
+            "url",
+            "package",
+            "is_active",
+            "is_deleted",
+            "is_confirmed",
+            "created_at",
+            "updated_at",
+            "confirmed_at",
+            "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "log",
+            "version",
+            "net_amount",
+            "field_verbose_names",
+            "price_data",
+            "price",
         ]
         read_only_fields = [
             "id",
@@ -155,7 +258,62 @@ class ProductSerializer(serializers.ModelSerializer):
             "updated_at",
             "confirmed_at",
             "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "price",
         ]
+
+
+class ProductManageSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    sku = serializers.CharField()
+    description = serializers.CharField()
+    base_net_amount = serializers.IntegerField()
+    obs = serializers.CharField()
+    package_unit = serializers.IntegerField()
+    min_package_purchase = serializers.IntegerField()
+    provider = serializers.IntegerField()
+    type = serializers.IntegerField()
+    type_name = serializers.CharField()
+    item_group = serializers.IntegerField()
+    group_name = serializers.CharField()
+    category = serializers.IntegerField()
+    category_name = serializers.CharField()
+    url = serializers.CharField(allow_null=True, allow_blank=True)
+    package = serializers.IntegerField()
+    package_description = serializers.CharField()
+    is_active = serializers.BooleanField()
+    is_deleted = serializers.BooleanField(allow_null=True)
+    is_confirmed = serializers.BooleanField(allow_null=True)
+    created_at = serializers.DateTimeField()
+
+    @staticmethod
+    def get_verbose_names():
+        return {
+            'code': 'Código UUID',
+            'sku': 'SKU',
+            'description': 'Descripción',
+            'base_net_amount': 'Valor Neto Base',
+            'obs': 'Observaciones',
+            'package_unit': 'Unidad de Empaque',
+            'min_package_purchase': 'Compra Mínima de Empaque',
+            'provider': 'Proveedor',
+            'type': 'Tipo (ID)',
+            'type_name': 'Tipo',
+            'item_group': 'Grupo (ID)',
+            'group_name': 'Nombre del Grupo',
+            'category': 'Categoría (ID)',
+            'category_name': 'Categoría',
+            'url': 'URL',
+            'package': 'Empaque (ID)',
+            'package_description': 'Descripción de Empaque',
+            'is_active': 'Está Activo',
+            'is_deleted': 'Está Eliminado',
+            'is_confirmed': 'Está Confirmado',
+            'created_at': 'Fecha de Creación',
+        }
 
 
 class MaterialSerializer(serializers.ModelSerializer):

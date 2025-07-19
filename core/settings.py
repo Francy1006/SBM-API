@@ -196,6 +196,30 @@ CORS_ALLOWED_ORIGINS = str(env("CORS_ALLOWED_ORIGINS")).split(",") + [
     'http://sbm-core:8082'
 ]
 
+# === Configuración de entorno ===
+DJANGO_ENV = os.environ.get('DJANGO_ENV', 'development')
+
+# === Google Auth solo en producción ===
+if DJANGO_ENV == "production":
+    # Ejemplo de configuración de Google Auth (ajusta según tu integración real)
+    # INSTALLED_APPS += ['social_django']
+    # AUTHENTICATION_BACKENDS = [
+    #     'social_core.backends.google.GoogleOAuth2',
+    #     # ...otros backends que uses...
+    # ]
+    # SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = env("GOOGLE_OAUTH2_KEY")
+    # SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = env("GOOGLE_OAUTH2_SECRET")
+    pass
+# En desarrollo, Google Auth está desactivado
+
+# === Configuración de usuario de prueba para desarrollo ===
+MOCK_USER_UUID = os.environ.get('MOCK_USER_UUID', 'mock-uuid')
+MOCK_USER_EMAIL = os.environ.get('MOCK_USER_EMAIL', 'mock@example.com')
+MOCK_USER_NAME = os.environ.get('MOCK_USER_NAME', 'MOCKUSER')
+MOCK_USER_TOKEN = os.environ.get('MOCK_USER_TOKEN', 'mock-token')
+
+GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '815958124165-c4jtlvju3ngm68ecpgqf3k208tqd984f.apps.googleusercontent.com')
+
 # Disable Django migrations for business apps - using Flyway instead
 # Enable migrations only for Django system apps
 MIGRATION_MODULES = {

@@ -8,10 +8,10 @@ from .models import (
 
 @admin.register(Price)
 class PriceAdmin(admin.ModelAdmin):
-    list_display = ['id', 'code', 'net_amount', 'gross_amount', 'is_active', 'created_at']
-    list_filter = ['is_active', 'is_deleted', 'is_confirmed']
+    list_display = ['id', 'code', 'net_amount', 'gross_amount', 'created_at']
+    list_filter = ['is_deleted', 'is_confirmed']
     search_fields = ['code']
-    readonly_fields = ['id', 'code', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
+    readonly_fields = ['id', 'code', 'created_at']
     ordering = ['-created_at']
 
 
@@ -35,10 +35,10 @@ class FiscalConfigurationDetailAdmin(admin.ModelAdmin):
 
 @admin.register(FiscalDirective)
 class FiscalDirectiveAdmin(admin.ModelAdmin):
-    list_display = ['id', 'code', 'fiscal_directive', 'type', 'percentage', 'is_deleted', 'is_confirmed', 'created_at']
+    list_display = ['id', 'code', 'fiscal_directive', 'type', 'value', 'is_deleted', 'is_confirmed', 'created_at']
     list_filter = ['is_deleted', 'is_confirmed', 'type']
     search_fields = ['fiscal_directive', 'code', 'obs']
-    readonly_fields = ['id', 'code', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
+    readonly_fields = ['id', 'code']
     ordering = ['fiscal_directive']
 
 

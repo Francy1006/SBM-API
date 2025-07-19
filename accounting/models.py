@@ -90,7 +90,7 @@ class FiscalDirective(models.Model):
         verbose_name="Tipo de Directiva Fiscal",
         related_name='fiscal_directives'
     )
-    percentage = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Porcentaje")
+    value = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Valor")
     official_source_url = models.CharField(max_length=255, verbose_name="URL de Fuente Oficial")
     is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
     is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
@@ -166,9 +166,9 @@ class FiscalDirectiveStats(models.Model):
     confirmed_directives = models.IntegerField(verbose_name="Directivas Confirmadas")
     deleted_directives = models.IntegerField(verbose_name="Directivas Eliminadas")
     pending_directives = models.IntegerField(verbose_name="Directivas Pendientes")
-    avg_percentage = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Porcentaje Promedio")
-    min_percentage = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Porcentaje Mínimo")
-    max_percentage = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Porcentaje Máximo")
+    avg_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Promedio")
+    min_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Mínimo")
+    max_value = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Valor Máximo")
     current_year_directives = models.IntegerField(verbose_name="Directivas del Año Actual")
     directives_with_month = models.IntegerField(verbose_name="Directivas con Mes")
     directives_with_end_month = models.IntegerField(verbose_name="Directivas con Mes Fin")

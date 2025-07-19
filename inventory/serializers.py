@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Warehouse, InventoryItem, InventoryMovement, InventoryCount, InventoryCountItem
+from .models import Warehouse, InventoryItem, InventoryMovement, InventoryCount, InventoryCountItem, Package, PackageType, TransportType, MeasureUnit
 
 
 class WarehouseSerializer(serializers.ModelSerializer):
@@ -194,3 +194,23 @@ class InventoryCountItemSerializer(serializers.ModelSerializer):
 
     def get_catalog_item_name(self, obj):
         return obj.catalog_item.name if obj.catalog_item else None 
+
+class PackageTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PackageType
+        fields = '__all__'
+
+class TransportTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransportType
+        fields = '__all__'
+
+class MeasureUnitSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MeasureUnit
+        fields = '__all__'
+
+class PackageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Package
+        fields = '__all__' 

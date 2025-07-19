@@ -3,7 +3,8 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     FranchiseStateViewSet, FranchiseViewSet, 
     FranchiseConfigurationTypeViewSet, FranchiseConfigurationViewSet, 
-    FranchiseConfigurationDetailViewSet
+    FranchiseConfigurationDetailViewSet,
+    FranchiseConfigurationView
 )
 
 # Crear el router para los ViewSets
@@ -19,4 +20,5 @@ app_name = 'franchise'
 urlpatterns = [
     # Incluir todas las rutas del router
     path('', include(router.urls)),
+    path('franchise-configuration/', FranchiseConfigurationView.as_view(), name='franchise-configuration'),
 ] 

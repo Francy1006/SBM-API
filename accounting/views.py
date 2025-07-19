@@ -73,7 +73,7 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_deleted', 'is_confirmed', 'type']
     search_fields = ['fiscal_directive', 'code', 'obs', 'type__type']
-    ordering_fields = ['id', 'fiscal_directive', 'created_at']
+    ordering_fields = ['id', 'fiscal_directive', 'created_at', 'value']
     ordering = ['fiscal_directive']
     
     def perform_create(self, serializer):

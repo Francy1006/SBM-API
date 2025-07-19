@@ -18,7 +18,7 @@ class CatalogAdmin(admin.ModelAdmin):
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = ['id', 'description', 'sku', 'is_active', 'provider', 'created_at']
-    list_filter = ['is_active', 'is_deleted', 'is_confirmed', 'provider', 'type', 'group', 'category']
+    list_filter = ['is_active', 'is_deleted', 'is_confirmed', 'provider', 'type', 'item_group', 'category']
     search_fields = ['description', 'sku', 'code', 'obs']
     readonly_fields = ['id', 'code', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
     ordering = ['-created_at']

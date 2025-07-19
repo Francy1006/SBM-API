@@ -87,7 +87,7 @@ class FiscalDirectiveSerializer(serializers.ModelSerializer):
     class Meta:
         model = FiscalDirective
         fields = [
-            'id', 'code', 'obs', 'fiscal_directive', 'type', 'percentage',
+            'id', 'code', 'obs', 'fiscal_directive', 'type', 'value',
             'official_source_url', 'is_deleted', 'is_confirmed', 'created_at',
             'updated_at', 'confirmed_at', 'deleted_at', 'created_by', 'confirmed_by',
             'updated_by', 'deleted_by', 'month', 'end_month', 'year', 'end_year', 'field_verbose_names'
@@ -128,7 +128,7 @@ class FiscalDirectiveStatsSerializer(serializers.ModelSerializer):
         fields = [
             'type', 'type_name', 'type_description', 'total_directives',
             'confirmed_directives', 'deleted_directives', 'pending_directives',
-            'avg_percentage', 'min_percentage', 'max_percentage',
+            'avg_value', 'min_value', 'max_value',
             'current_year_directives', 'directives_with_month',
             'directives_with_end_month', 'directives_with_end_year',
             'earliest_year', 'latest_year', 'unique_years', 'unique_months',

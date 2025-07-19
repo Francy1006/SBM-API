@@ -69,7 +69,7 @@ class Product(models.Model):
     price = models.CharField(max_length=36, verbose_name="Precio")
     provider = models.IntegerField(verbose_name="Proveedor")
     type = models.IntegerField(verbose_name="Tipo")
-    group = models.IntegerField(verbose_name="Grupo")
+    item_group = models.IntegerField(verbose_name="Grupo", db_column='item_group')
     category = models.IntegerField(verbose_name="Categoría")
     url = models.CharField(max_length=255, null=True, blank=True, verbose_name="URL")
     package = models.IntegerField(verbose_name="Empaque")

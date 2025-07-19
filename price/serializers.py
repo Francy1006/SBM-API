@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import PriceList, PriceItem, PriceDiscount, PriceHistory
+from .models import PriceList, PriceItem, PriceDiscount, PriceHistory, PriceConfiguration
 
 
 class PriceListSerializer(serializers.ModelSerializer):
@@ -153,3 +153,14 @@ class PriceHistorySerializer(serializers.ModelSerializer):
 
     def get_changed_by_name(self, obj):
         return obj.changed_by.get_full_name() if obj.changed_by else None 
+
+
+class PriceConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PriceConfiguration
+        fields = [
+            'id', 'code', 'price_configuration', 'franchise_configuration', 'variable_formula',
+            'is_deleted', 'is_confirmed', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at',
+            'created_by', 'confirmed_by', 'updated_by', 'deleted_by'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at'] 
