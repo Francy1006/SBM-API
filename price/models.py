@@ -13,12 +13,16 @@ class Price(models.Model):
     net_amount = models.IntegerField(default=0, verbose_name="Monto Neto")
     gross_amount = models.IntegerField(default=0, verbose_name="Monto Bruto")
     iva_amount = models.IntegerField(default=0, verbose_name="Monto IVA")
+    aditional_tax_amount = models.IntegerField(default=0, verbose_name="Monto Impuesto Adicional")
     retention_amount = models.IntegerField(default=0, verbose_name="Monto Retención")
     price_configuration = models.CharField(max_length=36, verbose_name="Configuración de Precio")
+    is_current = models.BooleanField(null=True, default=True, verbose_name="Es el precio actual")
     is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
     is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
     created_by = models.CharField(max_length=36, verbose_name="Creado Por")
+    record_item_code = models.CharField(max_length=36, null=True, blank=True, verbose_name="Código de Item de Registro")
+    price_record_type = models.IntegerField(null=True, blank=True, verbose_name="Tipo de Registro de Precio")
 
     class Meta:
         db_table = 'price'
@@ -179,3 +183,18 @@ class PriceConfiguration(models.Model):
 
     def __str__(self):
         return self.price_configuration
+
+
+class PriceTypeRecord(models.Model):
+    id = models.AutoField(primary_key=True)
+    type = models.CharField(max_length=50, verbose_name="Tipo")
+    description = models.TextField(verbose_name="Descripción")
+
+    class Meta:
+        db_table = 'price_type_record'
+        verbose_name = "Tipo de Registro de Precio"
+        verbose_name_plural = "Tipos de Registro de Precio"
+        ordering = ['type']
+
+    def __str__(self):
+        return self.type

@@ -195,25 +195,30 @@ class ProductSerializer(serializers.ModelSerializer):
         user_code = getattr(getattr(request, 'user', None), 'code', 'system')
         now = timezone.now()
         from price.models import Price
+        import uuid
         with transaction.atomic():
+            product_code = str(uuid.uuid4())
+            product = Product._default_manager.create(
+                **validated_data,
+                code=product_code,
+                created_by=user_code,
+                created_at=now
+            )
             price_code = str(uuid.uuid4())
             price_obj = Price._default_manager.create(
                 code=price_code,
                 base_net_amount=price_data['base_net_amount'],
-                net_amount=0,
                 gross_amount=0,
                 iva_amount=0,
                 retention_amount=0,
                 price_configuration=price_data['price_configuration'],
                 created_by=user_code,
-                created_at=now
+                created_at=now,
+                record_item_code=product_code,
+                price_record_type=1
             )
-            product = Product._default_manager.create(
-                **validated_data,
-                price=price_obj.code,
-                created_by=user_code,
-                created_at=now
-            )
+            product.price = price_obj.code
+            product.save()
         return product
 
     class Meta:
@@ -300,6 +305,68 @@ class ProductManageSerializer(serializers.Serializer):
             'package_unit': 'Unidad de Empaque',
             'min_package_purchase': 'Compra Mínima de Empaque',
             'provider': 'Proveedor',
+            'type': 'Tipo (ID)',
+            'type_name': 'Tipo',
+            'item_group': 'Grupo (ID)',
+            'group_name': 'Nombre del Grupo',
+            'category': 'Categoría (ID)',
+            'category_name': 'Categoría',
+            'url': 'URL',
+            'package': 'Empaque (ID)',
+            'package_description': 'Descripción de Empaque',
+            'is_active': 'Está Activo',
+            'is_deleted': 'Está Eliminado',
+            'is_confirmed': 'Está Confirmado',
+            'created_at': 'Fecha de Creación',
+        }
+
+
+class ProductListSerializer(serializers.Serializer):
+    code = serializers.CharField()
+    sku = serializers.CharField()
+    description = serializers.CharField()
+    base_net_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    net_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    gross_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    iva_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    aditional_tax_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    retention_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    price_configuration = serializers.CharField(allow_null=True)
+    price_configuration_label = serializers.CharField(allow_null=True)
+    obs = serializers.CharField(allow_null=True)
+    package_unit = serializers.IntegerField(allow_null=True)
+    min_package_purchase = serializers.IntegerField(allow_null=True)
+    provider = serializers.IntegerField(allow_null=True)
+    type = serializers.IntegerField(allow_null=True)
+    type_name = serializers.CharField(allow_null=True)
+    item_group = serializers.IntegerField(allow_null=True)
+    group_name = serializers.CharField(allow_null=True)
+    category = serializers.IntegerField(allow_null=True)
+    category_name = serializers.CharField(allow_null=True)
+    url = serializers.CharField(allow_null=True)
+    package = serializers.IntegerField(allow_null=True)
+    package_description = serializers.CharField(allow_null=True)
+    is_active = serializers.BooleanField()
+    is_deleted = serializers.BooleanField(allow_null=True)
+    is_confirmed = serializers.BooleanField(allow_null=True)
+    created_at = serializers.DateTimeField()
+
+    @staticmethod
+    def get_verbose_names():
+        return {
+            'code': 'Código UUID',
+            'sku': 'SKU',
+            'description': 'Descripción',
+            'base_net_amount': 'Valor Neto Base',
+            'net_amount': 'Valor Neto',
+            'gross_amount': 'Valor Bruto',
+            'iva_amount': 'Valor IVA',
+            'aditional_tax_amount': 'Valor Impuesto Adicional',
+            'retention_amount': 'Valor Retención',
+            'obs': 'Observaciones',
+            'package_unit': 'Unidad de Empaque',
+            'min_package_purchase': 'Compra Mínima de Empaque',
+            'provider': 'Proveedor (ID)',
             'type': 'Tipo (ID)',
             'type_name': 'Tipo',
             'item_group': 'Grupo (ID)',
@@ -733,3 +800,82 @@ class DistrictSerializer(serializers.ModelSerializer):
         model = District
         fields = ["id", "district", "region", "description"]
         read_only_fields = ["id"]
+
+
+class ProviderListSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    provider = serializers.CharField()
+    type = serializers.IntegerField()
+    type_name = serializers.CharField()
+    rating = serializers.IntegerField()
+    obs_provider = serializers.CharField()
+    contact_name = serializers.CharField(allow_null=True)
+    contact_mail = serializers.CharField(allow_null=True)
+    contact_phone = serializers.CharField(allow_null=True)
+    contact_phone2 = serializers.CharField(allow_null=True)
+    obs_contact = serializers.CharField(allow_null=True)
+    website_url = serializers.CharField(allow_null=True)
+    company_name = serializers.CharField(allow_null=True)
+    company_rut = serializers.CharField(allow_null=True)
+    company_activity = serializers.CharField(allow_null=True)
+    legal_representative = serializers.CharField(allow_null=True)
+    billing_address = serializers.CharField(allow_null=True)
+    billing_mail = serializers.CharField(allow_null=True)
+    billing_phone = serializers.CharField(allow_null=True)
+    company_bank = serializers.IntegerField(allow_null=True)
+    bank = serializers.CharField(allow_null=True)
+    bank_account_number = serializers.CharField(allow_null=True)
+    bank_account_type = serializers.IntegerField(allow_null=True)
+    bank_account_type_name = serializers.CharField(allow_null=True)
+    bank_account_mail = serializers.CharField(allow_null=True)
+    dispatch_address = serializers.CharField(allow_null=True)
+    dispatch_maps_location = serializers.CharField(allow_null=True)
+    obs_dispatch = serializers.CharField(allow_null=True)
+    dispatch_district = serializers.IntegerField(allow_null=True)
+    district = serializers.CharField(allow_null=True)
+    dispatch_region = serializers.IntegerField(allow_null=True)
+    region = serializers.CharField(allow_null=True)
+    is_active = serializers.BooleanField()
+    is_deleted = serializers.BooleanField(allow_null=True)
+    is_confirmed = serializers.BooleanField(allow_null=True)
+    
+    field_verbose_names = serializers.SerializerMethodField()
+
+    def get_field_verbose_names(self, obj):
+        return {
+            'id': 'ID',
+            'provider': 'Proveedor',
+            'type': 'Tipo',
+            'type_name': 'Tipo de Proveedor',
+            'rating': 'Calificación',
+            'obs_provider': 'Observaciones del Proveedor',
+            'contact_name': 'Nombre de Contacto',
+            'contact_mail': 'Email de Contacto',
+            'contact_phone': 'Teléfono de Contacto',
+            'contact_phone2': 'Teléfono de Contacto 2',
+            'obs_contact': 'Observaciones de Contacto',
+            'website_url': 'URL del Sitio Web',
+            'company_name': 'Nombre de la Empresa',
+            'company_rut': 'RUT de la Empresa',
+            'company_activity': 'Actividad de la Empresa',
+            'legal_representative': 'Representante Legal',
+            'billing_address': 'Dirección de Facturación',
+            'billing_mail': 'Email de Facturación',
+            'billing_phone': 'Teléfono de Facturación',
+            'company_bank': 'Banco de la Empresa',
+            'bank': 'Banco',
+            'bank_account_number': 'Número de Cuenta Bancaria',
+            'bank_account_type': 'Tipo de Cuenta Bancaria',
+            'bank_account_type_name': 'Tipo de Cuenta Bancaria',
+            'bank_account_mail': 'Email de Cuenta Bancaria',
+            'dispatch_address': 'Dirección de Despacho',
+            'dispatch_maps_location': 'Ubicación en Maps',
+            'obs_dispatch': 'Observaciones de Despacho',
+            'dispatch_district': 'Distrito de Despacho',
+            'district': 'Distrito',
+            'dispatch_region': 'Región de Despacho',
+            'region': 'Región',
+            'is_active': 'Está Activo',
+            'is_deleted': 'Está Eliminado',
+            'is_confirmed': 'Está Confirmado',
+        }
