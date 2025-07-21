@@ -66,13 +66,7 @@ class PriceHistoryViewSet(viewsets.ModelViewSet):
 
 
 class PriceConfigurationViewSet(viewsets.ModelViewSet):
-    queryset = PriceConfiguration.objects.all()
-    serializer_class = PriceConfigurationSerializer
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_deleted', 'is_confirmed', 'franchise_configuration', 'variable_formula']
-    search_fields = ['price_configuration', 'code']
-    ordering_fields = ['created_at', 'updated_at', 'price_configuration']
-    ordering = ['-created_at']
+    pass
 
 
 class PriceConfigurationDirectivesView(APIView):
@@ -119,5 +113,27 @@ class PriceFormulaView(APIView):
             results = cursor.fetchall()
         data = [
             {'formula': row[0], 'formula_template': row[1], 'formula_translate': row[2]} for row in results
+        ]
+        return Response(data)
+
+
+class PriceConfigurationFormulaView(APIView):
+    """
+    Endpoint que retorna price_configuration, formula_template y formula_translate para un price_configuration dado (por code).
+    """
+    def get(self, request):
+        code = request.query_params.get('code')
+        if not code:
+            return Response({'error': 'El parámetro code es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                SELECT pc.price_configuration, vf.formula_template, vf.formula_translate
+                FROM ditaly_pasta.price_configuration pc
+                LEFT JOIN sbm_business.variable_formula vf ON pc.variable_formula = vf.code
+                WHERE pc.code = %s
+            ''', [code])
+            results = cursor.fetchall()
+        data = [
+            {'price_configuration': row[0], 'formula_template': row[1], 'formula_translate': row[2]} for row in results
         ]
         return Response(data)
