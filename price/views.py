@@ -10,6 +10,8 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.db import connection
+from rest_framework.decorators import api_view
+from django.urls import path
 
 # Create your views here.
 
@@ -66,7 +68,8 @@ class PriceHistoryViewSet(viewsets.ModelViewSet):
 
 
 class PriceConfigurationViewSet(viewsets.ModelViewSet):
-    pass
+    queryset = PriceConfiguration.objects.all()
+    serializer_class = PriceConfigurationSerializer
 
 
 class PriceConfigurationDirectivesView(APIView):
@@ -135,5 +138,30 @@ class PriceConfigurationFormulaView(APIView):
             results = cursor.fetchall()
         data = [
             {'price_configuration': row[0], 'formula_template': row[1], 'formula_translate': row[2]} for row in results
+        ]
+        return Response(data)
+
+
+class VariableFormulaView(APIView):
+    """
+    Endpoint que retorna var, value, type (id) y variable_type (type) para un price_configuration dado (por code en query param).
+    """
+    def get(self, request):
+        code = request.query_params.get('code')
+        if not code:
+            return Response({'error': 'El parámetro code es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+        with connection.cursor() as cursor:
+            cursor.execute('''
+                SELECT fcd.var, fd.value, fdt.id as type, fdt."type" as variable_type
+                FROM ditaly_pasta.price_configuration pc
+                LEFT JOIN sbm_business.variable_formula vf ON pc.variable_formula = vf.code
+                LEFT JOIN ditaly_pasta.fiscal_configuration_detail fcd ON pc.code = fcd.price_configuration
+                LEFT JOIN sbm_business.fiscal_directive fd ON fcd.fiscal_directive = fd.code
+                LEFT JOIN sbm_business.fiscal_directive_type fdt ON fd.type = fdt.id
+                WHERE pc.code = %s
+            ''', [code])
+            results = cursor.fetchall()
+        data = [
+            {'var': row[0], 'value': row[1], 'type': row[2], 'variable_type': row[3]} for row in results
         ]
         return Response(data)

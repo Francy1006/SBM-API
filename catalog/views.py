@@ -154,7 +154,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         # Si no hay price_data, hacer el update normal
         return super().partial_update(request, *args, **kwargs)
 
-    @action(detail=False, methods=['get'], url_path='product-list')
+    @action(detail=False, methods=['get'], url_path='list')
     def product_list(self, request):
         sql = '''
         SELECT 
