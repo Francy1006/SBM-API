@@ -104,9 +104,39 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         if hasattr(self.request.user, 'code'):
-            serializer.save(created_by=self.request.user.code)
+            product = serializer.save(created_by=self.request.user.code)
         else:
-            serializer.save(created_by='system')
+            product = serializer.save(created_by='system')
+        
+        # Ejecutar automáticamente el cálculo de precio después de crear el producto
+        try:
+            from rest_framework.test import APIRequestFactory
+            from price.views import PriceCalculationFormulaView
+            from rest_framework.response import Response
+            
+            # Crear una request interna para el cálculo de precio
+            factory = APIRequestFactory()
+            calculation_request = factory.post('/price/product-price-calculation/', 
+                                             {'sku': product.sku}, 
+                                             format='json')
+            
+            # Agregar autenticación a la request interna
+            if hasattr(self.request, 'user') and self.request.user.is_authenticated:
+                calculation_request.user = self.request.user
+            
+            # Ejecutar el cálculo de precio
+            calculation_view = PriceCalculationFormulaView.as_view()
+            calculation_response = calculation_view(calculation_request)
+            
+            # Log del resultado (opcional)
+            if calculation_response.status_code != 200:
+                print(f"Warning: Price calculation failed for product {product.sku}: {calculation_response.status_code}")
+            else:
+                print(f"Price calculation completed successfully for product {product.sku}")
+                
+        except Exception as e:
+            print(f"Error executing price calculation for product {product.sku}: {str(e)}")
+            # No fallar la creación del producto si el cálculo falla
 
     def partial_update(self, request, *args, **kwargs):
         price_data = request.data.get('price_data', None)
