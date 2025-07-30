@@ -8,6 +8,7 @@ from .views import (
     PriceConfigurationViewSet,
     PriceConfigurationFormulaView,
     VariableFormulaView,
+    PriceCalculationFormulaView,
 )
 
 router = DefaultRouter()
@@ -23,4 +24,5 @@ urlpatterns = [
     path('price-formula/', PriceFormulaView.as_view(), name='price-formula'),
     path('price-configuration-formula/', PriceConfigurationFormulaView.as_view(), name='price-configuration-formula'),
     path('formula-variables/', VariableFormulaView.as_view(), name='formula-variables'),
+    path('calculation-formula/', PriceCalculationFormulaView.as_view(), name='calculation-formula'),
 ] 

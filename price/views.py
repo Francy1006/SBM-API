@@ -13,6 +13,12 @@ from django.db import connection
 from rest_framework.decorators import api_view
 from django.urls import path
 
+from catalog.models import Product
+from price.models import Price
+import re
+from django.db import transaction
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
+
 # Create your views here.
 
 class PriceListViewSet(viewsets.ModelViewSet):
@@ -165,3 +171,96 @@ class VariableFormulaView(APIView):
             {'var': row[0], 'value': row[1], 'type': row[2], 'variable_type': row[3]} for row in results
         ]
         return Response(data)
+
+
+class PriceCalculationFormulaView(APIView):
+    """
+    Endpoint POST que recibe un product.sku, obtiene la fórmula y variables asociadas a su price_configuration,
+    evalúa la fórmula y actualiza los campos net_amount, gross_amount, iva_amount en el modelo Price.
+    """
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def post(self, request):
+        sku = request.data.get('sku')
+        if not sku:
+            return Response({'error': 'El parámetro sku es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            product = Product.objects.get(sku=sku)
+        except Product.DoesNotExist:
+            return Response({'error': 'Producto no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        price_code = product.price
+        try:
+            price = Price.objects.get(code=price_code)
+        except Price.DoesNotExist:
+            return Response({'error': 'Precio no encontrado para el producto.'}, status=status.HTTP_404_NOT_FOUND)
+        price_configuration = price.price_configuration
+        # 1. Obtener la fórmula
+        from rest_framework.test import APIRequestFactory
+        factory = APIRequestFactory()
+        # price-configuration-formula
+        formula_req = factory.get(f'/price-configuration-formula/?code={price_configuration}')
+        # Agregar autenticación a la request interna
+        if hasattr(request, 'user') and request.user.is_authenticated:
+            formula_req.user = request.user
+        formula_view = PriceConfigurationFormulaView.as_view()
+        formula_resp = formula_view(formula_req)
+        
+        # Verificar si la respuesta es exitosa y tiene datos
+        if formula_resp.status_code != 200:
+            return Response({'error': f'Error obteniendo fórmula: {formula_resp.status_code}'}, status=400)
+        
+        # Verificar que data sea una lista y tenga elementos
+        if not formula_resp.data or not isinstance(formula_resp.data, list) or len(formula_resp.data) == 0:
+            return Response({'error': 'No se encontró fórmula para la configuración de precio.'}, status=400)
+        
+        formula_data = formula_resp.data[0]
+        if not formula_data or not formula_data.get('formula_template'):
+            return Response({'error': 'No se encontró fórmula para la configuración de precio.'}, status=400)
+        formula_template = formula_data['formula_template']
+        # 2. Obtener variables
+        variables_req = factory.get(f'/formula-variables/?code={price_configuration}')
+        # Agregar autenticación a la request interna
+        if hasattr(request, 'user') and request.user.is_authenticated:
+            variables_req.user = request.user
+        variables_view = VariableFormulaView.as_view()
+        variables_resp = variables_view(variables_req)
+        
+        # Verificar si la respuesta es exitosa
+        if variables_resp.status_code != 200:
+            return Response({'error': f'Error obteniendo variables: {variables_resp.status_code}'}, status=400)
+        
+        variables_list = variables_resp.data if variables_resp.data else []
+        # 3. Construir contexto de variables
+        context = {v['var']: v['value'] for v in variables_list if v['var']}
+        # Agregar base_net_amount
+        context['base_net_amount'] = price.base_net_amount
+        # 4. Parsear y evaluar la fórmula
+        results = {}
+        pattern = r'([a-zA-Z0-9_]+)\s*=([^;|]+)'  # net_amount = ...
+        matches = re.findall(pattern, formula_template)
+        for field, expr in matches:
+            expr_eval = expr.strip()
+            # Reemplazar variables en la expresión
+            for var, value in context.items():
+                # Buscar patrones como ${variable} y reemplazarlos
+                expr_eval = expr_eval.replace(f'${{{var}}}', str(value))
+            try:
+                value = eval(expr_eval, {"__builtins__": {}})
+            except Exception as e:
+                return Response({'error': f'Error evaluando la fórmula para {field}: {e}', 'expr': expr_eval}, status=400)
+            results[field.strip()] = value
+        # 5. Actualizar los campos en Price
+        with transaction.atomic():
+            for field in ['net_amount', 'gross_amount', 'iva_amount']:
+                if field in results:
+                    setattr(price, field, results[field])
+            price.save()
+        # 6. Responder con los valores calculados
+        return Response({
+            'sku': sku,
+            'price_code': price_code,
+            'price_configuration': price_configuration,
+            'formula_template': formula_template,
+            'variables': context,
+            'results': results,
+        })

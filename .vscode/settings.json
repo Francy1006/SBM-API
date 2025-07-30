@@ -1,10 +1,20 @@
+// DARK
 {
-    "workbench.colorTheme": "Default Dark+",
-    "workbench.colorCustomizations": {
-      "titleBar.activeBackground": "#000000",
-      "titleBar.activeForeground": "#ffffff",
-      "titleBar.inactiveBackground": "#1a1a1a",
-      "titleBar.inactiveForeground": "#cccccc"
-    }
+  "workbench.colorTheme": "Default Dark+",
+  "workbench.colorCustomizations": {
+    "titleBar.activeBackground": "#B00020",  // rojo fuerte
+    "titleBar.activeForeground": "#ffffff",
+    "titleBar.inactiveBackground": "#800015", // rojo más apagado
+    "titleBar.inactiveForeground": "#cccccc"
   }
-  
+}
+// LIGHT
+// {
+//   "workbench.colorTheme": "Default Light+",
+//   "workbench.colorCustomizations": {
+//     "titleBar.activeBackground": "#D32F2F",  // rojo vivo
+//     "titleBar.activeForeground": "#ffffff",
+//     "titleBar.inactiveBackground": "#F8BBD0", // rosado claro apagado
+//     "titleBar.inactiveForeground": "#333333"
+//   }
+// }

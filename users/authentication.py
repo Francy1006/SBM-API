@@ -31,8 +31,13 @@ class CustomTokenAuthentication(authentication.BaseAuthentication):
                 code=getattr(settings, 'MOCK_USER_UUID', 'mock-uuid'),
                 mail=getattr(settings, 'MOCK_USER_EMAIL', 'mock@example.com'),
                 name=getattr(settings, 'MOCK_USER_NAME', 'MOCKUSER'),
-                is_authenticated=True
+                is_authenticated=True,
+                is_active=True
             )
+            # Agregar método para verificar si el usuario está activo
+            def is_active():
+                return True
+            mock_user.is_active = is_active
             return (mock_user, None)
         # --- Fin token mock ---
 
