@@ -9,7 +9,6 @@ from .serializers import (
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from django.db import connection
 from rest_framework.decorators import api_view
 from django.urls import path
 
@@ -86,21 +85,27 @@ class PriceConfigurationDirectivesView(APIView):
         configuration = request.query_params.get('configuration')
         if not configuration:
             return Response({'error': 'El parámetro configuration es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
-        with connection.cursor() as cursor:
-            cursor.execute('''
-                SELECT fd.value, fcd.var
-                FROM sbm_business.fiscal_directive fd
-                LEFT JOIN ditaly_pasta.fiscal_configuration_detail fcd
-                  ON fd.code = fcd.fiscal_directive
-                LEFT JOIN ditaly_pasta.price_configuration pc
-                  ON pc.code = fcd.price_configuration
-                WHERE fcd.price_configuration = %s
-            ''', [configuration])
-            results = cursor.fetchall()
-        data = [
-            {'value': row[0], 'var': row[1]} for row in results
-        ]
-        return Response(data)
+        
+        try:
+            from accounting.models import FiscalDirective, FiscalConfigurationDetail
+            
+            # Obtener las directivas fiscales para la configuración de precio
+            fiscal_details = FiscalConfigurationDetail.objects.filter(
+                price_configuration=configuration
+            ).select_related('fiscal_directive')
+            
+            data = []
+            for detail in fiscal_details:
+                if detail.fiscal_directive:
+                    data.append({
+                        'value': detail.fiscal_directive.value,
+                        'var': detail.var
+                    })
+            
+            return Response(data)
+            
+        except Exception as e:
+            return Response({'error': f'Error obteniendo directivas: {str(e)}'}, status=400)
 
 
 class PriceFormulaView(APIView):
@@ -111,19 +116,28 @@ class PriceFormulaView(APIView):
         configuration = request.query_params.get('configuration')
         if not configuration:
             return Response({'error': 'El parámetro configuration es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
-        with connection.cursor() as cursor:
-            cursor.execute('''
-                SELECT vf.formula, vf.formula_template, vf.formula_translate
-                FROM sbm_business.variable_formula vf
-                LEFT JOIN ditaly_pasta.price_configuration pc
-                  ON vf.code = pc.variable_formula
-                WHERE pc.code = %s
-            ''', [configuration])
-            results = cursor.fetchall()
-        data = [
-            {'formula': row[0], 'formula_template': row[1], 'formula_translate': row[2]} for row in results
-        ]
-        return Response(data)
+        
+        try:
+            from accounting.models import VariableFormula
+            
+            # Obtener la configuración de precio con su variable_formula
+            price_config = PriceConfiguration.objects.select_related('variable_formula').get(code=configuration)
+            
+            if not price_config.variable_formula:
+                return Response({'error': 'No se encontró variable_formula para la configuración de precio.'}, status=400)
+            
+            data = [{
+                'formula': price_config.variable_formula.formula,
+                'formula_template': price_config.variable_formula.formula_template,
+                'formula_translate': price_config.variable_formula.formula_translate
+            }]
+            
+            return Response(data)
+            
+        except PriceConfiguration.DoesNotExist:
+            return Response({'error': 'Configuración de precio no encontrada.'}, status=400)
+        except Exception as e:
+            return Response({'error': f'Error obteniendo fórmula: {str(e)}'}, status=400)
 
 
 class PriceConfigurationFormulaView(APIView):
@@ -134,18 +148,25 @@ class PriceConfigurationFormulaView(APIView):
         code = request.query_params.get('code')
         if not code:
             return Response({'error': 'El parámetro code es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
-        with connection.cursor() as cursor:
-            cursor.execute('''
-                SELECT pc.price_configuration, vf.formula_template, vf.formula_translate
-                FROM ditaly_pasta.price_configuration pc
-                LEFT JOIN sbm_business.variable_formula vf ON pc.variable_formula = vf.code
-                WHERE pc.code = %s
-            ''', [code])
-            results = cursor.fetchall()
-        data = [
-            {'price_configuration': row[0], 'formula_template': row[1], 'formula_translate': row[2]} for row in results
-        ]
-        return Response(data)
+        
+        try:
+            from accounting.models import VariableFormula
+            
+            # Obtener la configuración de precio con su variable_formula
+            price_config = PriceConfiguration.objects.select_related('variable_formula').get(code=code)
+            
+            data = [{
+                'price_configuration': price_config.price_configuration,
+                'formula_template': price_config.variable_formula.formula_template if price_config.variable_formula else None,
+                'formula_translate': price_config.variable_formula.formula_translate if price_config.variable_formula else None
+            }]
+            
+            return Response(data)
+            
+        except PriceConfiguration.DoesNotExist:
+            return Response({'error': 'Configuración de precio no encontrada.'}, status=400)
+        except Exception as e:
+            return Response({'error': f'Error obteniendo configuración: {str(e)}'}, status=400)
 
 
 class VariableFormulaView(APIView):
@@ -156,21 +177,30 @@ class VariableFormulaView(APIView):
         code = request.query_params.get('code')
         if not code:
             return Response({'error': 'El parámetro code es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
-        with connection.cursor() as cursor:
-            cursor.execute('''
-                SELECT fcd.var, fd.value, fdt.id as type, fdt."type" as variable_type
-                FROM ditaly_pasta.price_configuration pc
-                LEFT JOIN sbm_business.variable_formula vf ON pc.variable_formula = vf.code
-                LEFT JOIN ditaly_pasta.fiscal_configuration_detail fcd ON pc.code = fcd.price_configuration
-                LEFT JOIN sbm_business.fiscal_directive fd ON fcd.fiscal_directive = fd.code
-                LEFT JOIN sbm_business.fiscal_directive_type fdt ON fd.type = fdt.id
-                WHERE pc.code = %s
-            ''', [code])
-            results = cursor.fetchall()
-        data = [
-            {'var': row[0], 'value': row[1], 'type': row[2], 'variable_type': row[3]} for row in results
-        ]
-        return Response(data)
+        
+        try:
+            from accounting.models import FiscalDirective, FiscalDirectiveType
+            from fiscal.models import FiscalConfigurationDetail
+            
+            # Obtener las variables de la configuración fiscal
+            fiscal_details = FiscalConfigurationDetail.objects.filter(
+                price_configuration=code
+            ).select_related('fiscal_directive', 'fiscal_directive__type')
+            
+            data = []
+            for detail in fiscal_details:
+                if detail.var and detail.fiscal_directive:
+                    data.append({
+                        'var': detail.var,
+                        'value': detail.fiscal_directive.value,
+                        'type': detail.fiscal_directive.type.id if detail.fiscal_directive.type else None,
+                        'variable_type': detail.fiscal_directive.type.type if detail.fiscal_directive.type else None
+                    })
+            
+            return Response(data)
+            
+        except Exception as e:
+            return Response({'error': f'Error obteniendo variables: {str(e)}'}, status=400)
 
 
 class PriceCalculationFormulaView(APIView):
@@ -184,60 +214,73 @@ class PriceCalculationFormulaView(APIView):
         sku = request.data.get('sku')
         if not sku:
             return Response({'error': 'El parámetro sku es requerido.'}, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
             product = Product.objects.get(sku=sku)
         except Product.DoesNotExist:
             return Response({'error': 'Producto no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        
         price_code = product.price
         try:
             price = Price.objects.get(code=price_code)
         except Price.DoesNotExist:
             return Response({'error': 'Precio no encontrado para el producto.'}, status=status.HTTP_404_NOT_FOUND)
+        
         price_configuration = price.price_configuration
-        # 1. Obtener la fórmula
-        from rest_framework.test import APIRequestFactory
-        factory = APIRequestFactory()
-        # price-configuration-formula
-        formula_req = factory.get(f'/price-configuration-formula/?code={price_configuration}')
-        # Agregar autenticación a la request interna
-        if hasattr(request, 'user') and request.user.is_authenticated:
-            formula_req.user = request.user
-        formula_view = PriceConfigurationFormulaView.as_view()
-        formula_resp = formula_view(formula_req)
         
-        # Verificar si la respuesta es exitosa y tiene datos
-        if formula_resp.status_code != 200:
-            return Response({'error': f'Error obteniendo fórmula: {formula_resp.status_code}'}, status=400)
+        # 1. Obtener la fórmula usando ORM
+        try:
+            # Importar los modelos necesarios
+            from accounting.models import VariableFormula
+            from django.db.models import Q
+            
+            # Obtener la configuración de precio con su variable_formula
+            price_config = PriceConfiguration.objects.select_related('variable_formula').get(code=price_configuration)
+            
+            if not price_config.variable_formula:
+                return Response({'error': 'No se encontró variable_formula para la configuración de precio.'}, status=400)
+            
+            formula_template = price_config.variable_formula.formula_template
+            if not formula_template:
+                return Response({'error': 'No se encontró fórmula para la configuración de precio.'}, status=400)
+                
+        except PriceConfiguration.DoesNotExist:
+            return Response({'error': 'Configuración de precio no encontrada.'}, status=400)
+        except Exception as e:
+            return Response({'error': f'Error obteniendo fórmula: {str(e)}'}, status=400)
         
-        # Verificar que data sea una lista y tenga elementos
-        if not formula_resp.data or not isinstance(formula_resp.data, list) or len(formula_resp.data) == 0:
-            return Response({'error': 'No se encontró fórmula para la configuración de precio.'}, status=400)
+        # 2. Obtener variables usando ORM
+        try:
+            from accounting.models import FiscalDirective, FiscalDirectiveType, FiscalConfigurationDetail
+            
+            # Obtener las variables de la configuración fiscal
+            fiscal_details = FiscalConfigurationDetail.objects.filter(
+                price_configuration=price_configuration
+            ).select_related('fiscal_directive', 'fiscal_directive__type')
+            
+            variables_list = []
+            for detail in fiscal_details:
+                if detail.var and detail.fiscal_directive:
+                    variables_list.append({
+                        'var': detail.var,
+                        'value': detail.fiscal_directive.value,
+                        'type': detail.fiscal_directive.type.id if detail.fiscal_directive.type else None,
+                        'variable_type': detail.fiscal_directive.type.type if detail.fiscal_directive.type else None
+                    })
+                    
+        except Exception as e:
+            return Response({'error': f'Error obteniendo variables: {str(e)}'}, status=400)
         
-        formula_data = formula_resp.data[0]
-        if not formula_data or not formula_data.get('formula_template'):
-            return Response({'error': 'No se encontró fórmula para la configuración de precio.'}, status=400)
-        formula_template = formula_data['formula_template']
-        # 2. Obtener variables
-        variables_req = factory.get(f'/formula-variables/?code={price_configuration}')
-        # Agregar autenticación a la request interna
-        if hasattr(request, 'user') and request.user.is_authenticated:
-            variables_req.user = request.user
-        variables_view = VariableFormulaView.as_view()
-        variables_resp = variables_view(variables_req)
-        
-        # Verificar si la respuesta es exitosa
-        if variables_resp.status_code != 200:
-            return Response({'error': f'Error obteniendo variables: {variables_resp.status_code}'}, status=400)
-        
-        variables_list = variables_resp.data if variables_resp.data else []
         # 3. Construir contexto de variables
         context = {v['var']: v['value'] for v in variables_list if v['var']}
         # Agregar base_net_amount
         context['base_net_amount'] = price.base_net_amount
+        
         # 4. Parsear y evaluar la fórmula
         results = {}
         pattern = r'([a-zA-Z0-9_]+)\s*=([^;|]+)'  # net_amount = ...
         matches = re.findall(pattern, formula_template)
+        
         for field, expr in matches:
             expr_eval = expr.strip()
             # Reemplazar variables en la expresión
@@ -249,12 +292,14 @@ class PriceCalculationFormulaView(APIView):
             except Exception as e:
                 return Response({'error': f'Error evaluando la fórmula para {field}: {e}', 'expr': expr_eval}, status=400)
             results[field.strip()] = value
+        
         # 5. Actualizar los campos en Price
         with transaction.atomic():
             for field in ['net_amount', 'gross_amount', 'iva_amount']:
                 if field in results:
                     setattr(price, field, results[field])
             price.save()
+        
         # 6. Responder con los valores calculados
         return Response({
             'sku': sku,

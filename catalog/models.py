@@ -14,18 +14,19 @@ class Catalog(models.Model):
     category = models.ForeignKey('ItemCategory', db_column='category', on_delete=models.CASCADE, related_name='catalogs', verbose_name="Categoría")
     type = models.ForeignKey('ItemType', db_column='type', on_delete=models.CASCADE, related_name='catalogs', verbose_name="Tipo")
     restriction = models.ForeignKey('Restriction', db_column='restriction', on_delete=models.CASCADE, related_name='catalogs', verbose_name="Restricción")
-    name = models.CharField(max_length=255, verbose_name="Nombre")
+    name = models.CharField(max_length=50, verbose_name="Nombre")
     description = models.TextField(verbose_name="Descripción")
-    obs = models.TextField(verbose_name="Observaciones")
+    obs = models.CharField(max_length=255, null=True, blank=True, verbose_name="Observaciones")
     chef_recommendation = models.BooleanField(default=False, verbose_name="Recomendación del Chef")  # type: ignore
-    usage_instructions = models.TextField(verbose_name="Instrucciones de Uso")
-    min_quantity_purchase = models.IntegerField(verbose_name="Cantidad Mínima de Compra")
-    rations_quantity = models.IntegerField(verbose_name="Cantidad de Raciones")
-    cover_image = models.CharField(max_length=255, null=True, blank=True, verbose_name="Imagen de Portada")
-    secondary_image = models.CharField(max_length=255, null=True, blank=True, verbose_name="Imagen Secundaria")
-    complementary_image = models.CharField(max_length=255, null=True, blank=True, verbose_name="Imagen Complementaria")
-    image_gallery = models.TextField(null=True, blank=True, verbose_name="Galería de Imágenes")
-    configuration = models.TextField(null=True, blank=True, verbose_name="Configuración")
+    usage_instructions = models.ForeignKey('Instruction', db_column='usage_instructions_id', on_delete=models.CASCADE, related_name='catalogs', verbose_name="Instrucciones de Uso")
+    price = models.CharField(max_length=36, verbose_name="Precio")
+    min_quantity_purchase = models.IntegerField(default=1, verbose_name="Cantidad Mínima de Compra")
+    rations_quantity = models.IntegerField(default=1, verbose_name="Cantidad de Raciones")
+    cover_image = models.CharField(max_length=2083, null=True, blank=True, verbose_name="Imagen de Portada")
+    secondary_image = models.CharField(max_length=2083, null=True, blank=True, verbose_name="Imagen Secundaria")
+    complementary_image = models.CharField(max_length=2083, null=True, blank=True, verbose_name="Imagen Complementaria")
+    image_gallery = models.CharField(max_length=2083, null=True, blank=True, verbose_name="Galería de Imágenes")
+    configuration = models.ForeignKey('ItemConfiguration', db_column='configuration', on_delete=models.CASCADE, related_name='catalogs', verbose_name="Configuración")
     is_visible = models.BooleanField(default=True, verbose_name="Es Visible")  # type: ignore
     is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
     is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
@@ -310,11 +311,11 @@ class Instruction(models.Model):
     """
     Modelo para instrucciones
     """
-    id = models.CharField(max_length=36, primary_key=True, verbose_name="Código UUID")
+    code = models.CharField(max_length=36, primary_key=True, verbose_name="Código UUID")
     instruction = models.CharField(max_length=50, verbose_name="Instrucción")
     description = models.TextField(verbose_name="Descripción")
     url_documentation = models.CharField(max_length=2083, null=True, blank=True, verbose_name="URL de Documentación")
-    type = models.IntegerField(verbose_name="Tipo")
+    type = models.ForeignKey('InstructionType', db_column='type', on_delete=models.CASCADE, related_name='instructions', verbose_name="Tipo")
     is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
     is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
@@ -492,3 +493,72 @@ class District(models.Model):
 
     def __str__(self):
         return self.district
+
+
+# Import shared models from inventory app
+from inventory.models import Package, PackageType, TransportType, MeasureUnit
+
+
+class InstructionType(models.Model):
+    """
+    Modelo para tipos de instrucciones
+    """
+    id = models.AutoField(primary_key=True)
+    type = models.CharField(max_length=50, verbose_name="Tipo")
+    description = models.TextField(verbose_name="Descripción")
+    is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
+    is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    updated_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Actualización")
+    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Confirmación")
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Eliminación")
+    created_by = models.CharField(max_length=36, verbose_name="Creado Por")
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Confirmado Por")
+    updated_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Actualizado Por")
+    deleted_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Eliminado Por")
+
+    class Meta:
+        db_table = 'instruction_type'
+        verbose_name = "Tipo de Instrucción"
+        verbose_name_plural = "Tipos de Instrucciones"
+        ordering = ['type']
+
+    def __str__(self):
+        return self.type
+
+
+class ItemConfiguration(models.Model):
+    """
+    Modelo para configuraciones de items
+    """
+    id = models.AutoField(primary_key=True)
+    code = models.CharField(max_length=36, unique=True, verbose_name="Código UUID")
+    configuration = models.CharField(max_length=50, verbose_name="Configuración")
+    description = models.TextField(verbose_name="Descripción")
+    package = models.ForeignKey(Package, db_column='package', on_delete=models.CASCADE, related_name='item_configurations', verbose_name="Paquete")
+    is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
+    is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
+    updated_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Actualización")
+    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Confirmación")
+    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Eliminación")
+    created_by = models.CharField(max_length=36, verbose_name="Creado Por")
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Confirmado Por")
+    updated_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Actualizado Por")
+    deleted_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Eliminado Por")
+    log = models.TextField(default="init;", verbose_name="Log")
+    version = models.IntegerField(default=1, verbose_name="Versión")  # type: ignore
+
+    class Meta:
+        db_table = 'item_configuration'
+        verbose_name = "Configuración de Item"
+        verbose_name_plural = "Configuraciones de Items"
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return self.configuration
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = str(uuid.uuid4())
+        super().save(*args, **kwargs)

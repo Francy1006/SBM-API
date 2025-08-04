@@ -85,10 +85,10 @@ class RestrictionAdmin(admin.ModelAdmin):
 
 @admin.register(Instruction)
 class InstructionAdmin(admin.ModelAdmin):
-    list_display = ['id', 'instruction', 'type', 'is_deleted', 'is_confirmed', 'created_at']
+    list_display = ['code', 'instruction', 'type', 'is_deleted', 'is_confirmed', 'created_at']
     list_filter = ['is_deleted', 'is_confirmed', 'type']
     search_fields = ['instruction', 'description']
-    readonly_fields = ['id', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
+    readonly_fields = ['created_at', 'updated_at', 'confirmed_at', 'deleted_at']
     ordering = ['instruction']
 
 

@@ -6,19 +6,22 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from .models import (
     Catalog, Product, Material, Service,
-    Menu, ItemGroup, ItemCategory, ItemType, Restriction, Instruction,
-    Provider, ProviderType, Bank, BankAccountType, District, Region
+    Menu, ItemGroup, ItemCategory, ItemType, Restriction, Instruction, InstructionType,
+    Provider, ProviderType, Bank, BankAccountType, District, Region,
+    ItemConfiguration
 )
+from inventory.models import Package, PackageType, TransportType, MeasureUnit
 from price.models import Price
 from .serializers import (
     CatalogSerializer, ProductSerializer, MaterialSerializer, ServiceSerializer,
     MenuSerializer, ItemGroupSerializer, ItemCategorySerializer, ItemTypeSerializer,
-    RestrictionSerializer, InstructionSerializer, ProviderSerializer,
+    RestrictionSerializer, InstructionSerializer, InstructionTypeSerializer, ProviderSerializer,
     ProviderTypeSerializer, BankSerializer, BankAccountTypeSerializer, DistrictSerializer, RegionSerializer,
-    ProductManageSerializer, ProviderListSerializer, ProductListSerializer
+    ProductManageSerializer, ProviderListSerializer, ProductListSerializer, CatalogListSerializer,
+    ItemConfigurationSerializer, PackageSerializer, PackageTypeSerializer, TransportTypeSerializer, MeasureUnitSerializer
 )
-from django.db import connection
-from django.db import transaction
+
+from django.db import transaction, connection
 from rest_framework import serializers
 
 
@@ -44,7 +47,7 @@ class CatalogViewSet(viewsets.ModelViewSet):
         """
         Optimizar consultas con select_related para datos relacionados
         """
-        return Catalog.objects.select_related().all()  # type: ignore
+        return Catalog.objects.select_related('menu', 'item_group', 'category', 'type', 'usage_instructions', 'configuration').all()  # type: ignore
 
     @action(detail=False, methods=['get'])
     def visible(self, request):
@@ -81,6 +84,80 @@ class CatalogViewSet(viewsets.ModelViewSet):
             'restriction_id': catalog.restriction_id,
         }
         return Response(data)
+
+    @action(detail=False, methods=['get'], url_path='list')
+    def catalog_list(self, request):
+        try:
+            from django.db.models import Q
+            from price.models import Price
+            
+            # Obtener catálogos usando ORM con select_related para optimizar consultas
+            catalogs = Catalog.objects.select_related(
+                'menu', 'item_group', 'category', 'type', 'usage_instructions', 'configuration'
+            ).all()
+            
+            # Filtrar catálogos visibles si es necesario
+            if request.query_params.get('visible_only') == 'true':
+                catalogs = catalogs.filter(is_visible=True, is_deleted=False)
+            
+            results = []
+            for catalog in catalogs:
+                # Obtener el precio asociado
+                try:
+                    price_obj = Price.objects.filter(
+                        code=catalog.price,
+                        is_current=True
+                    ).first()
+                    
+                    # Construir el resultado
+                    result = {
+                        'sku': catalog.sku,
+                        'cover_image': catalog.cover_image,
+                        'menu': catalog.menu.id if catalog.menu else None,
+                        'menu_name': catalog.menu.menu if catalog.menu else None,
+                        'category': catalog.category.id if catalog.category else None,
+                        'category_name': catalog.category.category if catalog.category else None,
+                        'name': catalog.name,
+                        'description': catalog.description,
+                        'obs': catalog.obs,
+                        'chef_recommendation': catalog.chef_recommendation,
+                        'item_type': catalog.type.id if catalog.type else None,
+                        'type_name': catalog.type.type if catalog.type else None,
+                        'item_group': catalog.item_group.id if catalog.item_group else None,
+                        'group_name': catalog.item_group.group_name if catalog.item_group else None,
+                        'base_net_amount': price_obj.base_net_amount if price_obj else None,
+                        'net_amount': price_obj.net_amount if price_obj else None,
+                        'gross_amount': price_obj.gross_amount if price_obj else None,
+                        'iva_amount': price_obj.iva_amount if price_obj else None,
+                        'aditional_tax_amount': price_obj.aditional_tax_amount if price_obj else None,
+                        'retention_amount': price_obj.retention_amount if price_obj else None,
+                        'price_configuration': price_obj.price_configuration if price_obj else None,
+                        'min_quantity_purchase': catalog.min_quantity_purchase,
+                        'rations_quantity': catalog.rations_quantity,
+                        'item_configuration': catalog.configuration.code if catalog.configuration else None,
+                        'configuration': catalog.configuration.configuration if catalog.configuration else None,
+                        'is_visible': catalog.is_visible,
+                        'is_confirmed': catalog.is_confirmed,
+                        'created_at': catalog.created_at,
+                    }
+                    results.append(result)
+                    
+                except Exception as e:
+                    # Si hay error con un catálogo específico, continuar con el siguiente
+                    print(f"Error procesando catálogo {catalog.sku}: {str(e)}")
+                    continue
+            
+            verbose_names = CatalogListSerializer.get_verbose_names()
+            
+            page = self.paginate_queryset(results)
+            if page is not None:
+                serializer = CatalogListSerializer(page, many=True)
+                return self.get_paginated_response({'results': serializer.data, 'verbose_names': verbose_names})
+            serializer = CatalogListSerializer(results, many=True)
+            return Response({'results': serializer.data, 'verbose_names': verbose_names})
+            
+        except Exception as e:
+            return Response({'error': f'Error obteniendo lista de catálogos: {str(e)}'}, status=500)
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -186,28 +263,74 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='list')
     def product_list(self, request):
-        sql = '''
-        SELECT 
-          p.code, p.sku, p.description, pr.base_net_amount, pr.net_amount, pr.gross_amount, 
-          pr.iva_amount, pr.aditional_tax_amount, pr.retention_amount, pr.price_configuration, pc.price_configuration as price_configuration_label, 
-          p.obs, p.package_unit, p.min_package_purchase, p.provider, p.type, it."type" as type_name, 
-          p.item_group, ig.group_name, p.category, ic.category as category_name, p.url, 
-          p.package, pa.description as package_description, p.is_active, p.is_deleted, p.is_confirmed, p.created_at
-        FROM ditaly_pasta.product p
-        LEFT JOIN LATERAL (
-            SELECT pr.*
-            FROM ditaly_pasta.price pr
-            WHERE p.price = pr.code AND pr.is_current = true
-            ORDER BY pr.created_at DESC
-            LIMIT 1
-        ) pr ON true
-        LEFT JOIN sbm_business.item_type it ON p.type = it.id
-        LEFT JOIN sbm_business.item_group ig ON p.item_group = ig.id
-        LEFT JOIN sbm_business.item_category ic ON p.category = ic.id 
-        LEFT JOIN sbm_business.package pa ON p.package = pa.id
-        left join ditaly_pasta.price_configuration pc on pr.price_configuration = pc.code 
-        '''
-        verbose_names = {
+        try:
+            from django.db.models import Q
+            from price.models import Price, PriceConfiguration
+            from catalog.models import ItemType, ItemGroup, ItemCategory
+            from inventory.models import Package
+            
+            # Obtener productos usando ORM
+            products = Product.objects.all()
+            
+            # Filtrar productos activos si es necesario
+            if request.query_params.get('active_only') == 'true':
+                products = products.filter(is_active=True, is_deleted=False)
+            
+            results = []
+            for product in products:
+                # Obtener el precio actual (is_current=True)
+                try:
+                    current_price = Price.objects.filter(
+                        code=product.price,
+                        is_current=True
+                    ).first()
+                    
+                    # Obtener la configuración de precio
+                    price_config = None
+                    if current_price:
+                        price_config = PriceConfiguration.objects.filter(
+                            code=current_price.price_configuration
+                        ).first()
+                    
+                    # Construir el resultado
+                    result = {
+                        'code': product.code,
+                        'sku': product.sku,
+                        'description': product.description,
+                        'base_net_amount': current_price.base_net_amount if current_price else 0,
+                        'net_amount': current_price.net_amount if current_price else 0,
+                        'gross_amount': current_price.gross_amount if current_price else 0,
+                        'iva_amount': current_price.iva_amount if current_price else 0,
+                        'aditional_tax_amount': current_price.aditional_tax_amount if current_price else 0,
+                        'retention_amount': current_price.retention_amount if current_price else 0,
+                        'price_configuration': current_price.price_configuration if current_price else None,
+                        'price_configuration_label': price_config.price_configuration if price_config else None,
+                        'obs': product.obs,
+                        'package_unit': product.package_unit,
+                        'min_package_purchase': product.min_package_purchase,
+                        'provider': product.provider,
+                        'type': product.type,
+                        'type_name': None,  # Se puede obtener consultando ItemType por ID si es necesario
+                        'item_group': product.item_group,
+                        'group_name': None,  # Se puede obtener consultando ItemGroup por ID si es necesario
+                        'category': product.category,
+                        'category_name': None,  # Se puede obtener consultando ItemCategory por ID si es necesario
+                        'url': product.url,
+                        'package': product.package,
+                        'package_description': None,  # Se puede obtener consultando Package por ID si es necesario
+                        'is_active': product.is_active,
+                        'is_deleted': product.is_deleted,
+                        'is_confirmed': product.is_confirmed,
+                        'created_at': product.created_at,
+                    }
+                    results.append(result)
+                    
+                except Exception as e:
+                    # Si hay error con un producto específico, continuar con el siguiente
+                    print(f"Error procesando producto {product.sku}: {str(e)}")
+                    continue
+            
+            verbose_names = {
             'code': 'Código',
             'sku': 'SKU',
             'description': 'Descripción',
@@ -236,17 +359,17 @@ class ProductViewSet(viewsets.ModelViewSet):
             'is_deleted': 'Está Eliminado',
             'is_confirmed': 'Está Confirmado',
             'created_at': 'Fecha de Creación',
-        }
-        with connection.cursor() as cursor:
-            cursor.execute(sql)
-            columns = [col[0] for col in cursor.description]
-            results = [dict(zip(columns, row)) for row in cursor.fetchall()]
-        page = self.paginate_queryset(results)
-        if page is not None:
-            serializer = ProductListSerializer(page, many=True)
-            return self.get_paginated_response({'results': serializer.data, 'verbose_names': verbose_names})
-        serializer = ProductListSerializer(results, many=True)
-        return Response({'results': serializer.data, 'verbose_names': verbose_names})
+            }
+            
+            page = self.paginate_queryset(results)
+            if page is not None:
+                serializer = ProductListSerializer(page, many=True)
+                return self.get_paginated_response({'results': serializer.data, 'verbose_names': verbose_names})
+            serializer = ProductListSerializer(results, many=True)
+            return Response({'results': serializer.data, 'verbose_names': verbose_names})
+            
+        except Exception as e:
+            return Response({'error': f'Error obteniendo lista de productos: {str(e)}'}, status=500)
 
     @action(detail=False, methods=['get'])
     def active(self, request):
@@ -417,11 +540,18 @@ class InstructionViewSet(viewsets.ModelViewSet):
     """
     queryset = Instruction.objects.all()  # type: ignore
     serializer_class = InstructionSerializer
+    lookup_field = 'code'
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_deleted', 'is_confirmed', 'type']
     search_fields = ['instruction', 'description']
-    ordering_fields = ['id', 'instruction', 'created_at']
+    ordering_fields = ['code', 'instruction', 'created_at']
     ordering = ['instruction']
+
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'code'):
+            serializer.save(created_by=self.request.user.code)
+        else:
+            serializer.save(created_by='system')
 
 
 
@@ -598,3 +728,131 @@ class DistrictViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+
+class ItemConfigurationViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para el modelo ItemConfiguration
+    Proporciona operaciones CRUD completas para configuraciones de items
+    """
+    queryset = ItemConfiguration.objects.all()  # type: ignore
+    serializer_class = ItemConfigurationSerializer
+    lookup_field = 'code'
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['is_deleted', 'is_confirmed', 'package']
+    search_fields = ['configuration', 'description', 'code']
+    ordering_fields = ['id', 'configuration', 'created_at', 'updated_at']
+    ordering = ['-created_at']
+
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'code'):
+            serializer.save(created_by=self.request.user.code)
+        else:
+            serializer.save(created_by='system')
+
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """
+        Endpoint para obtener solo configuraciones activas
+        """
+        queryset = self.get_queryset().filter(is_deleted=False)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+    @action(detail=False, methods=['get'])
+    def by_package(self, request):
+        """
+        Endpoint para filtrar configuraciones por paquete
+        """
+        package_id = request.query_params.get('package_id')
+        if package_id:
+            queryset = self.get_queryset().filter(package=package_id, is_deleted=False)
+        else:
+            queryset = self.get_queryset().filter(is_deleted=False)
+        
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class PackageViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para el modelo Package
+    Proporciona operaciones CRUD completas para paquetes
+    """
+    queryset = Package.objects.all()  # type: ignore
+    serializer_class = PackageSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['is_deleted', 'is_confirmed', 'package_type', 'transport_type']
+    search_fields = ['description']
+    ordering_fields = ['id', 'description', 'created_at', 'updated_at']
+    ordering = ['-created_at']
+
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'code'):
+            serializer.save(created_by=self.request.user.code)
+        else:
+            serializer.save(created_by='system')
+
+    @action(detail=False, methods=['get'])
+    def active(self, request):
+        """
+        Endpoint para obtener solo paquetes activos
+        """
+        queryset = self.get_queryset().filter(is_deleted=False)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
+
+
+class PackageTypeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para el modelo PackageType
+    """
+    queryset = PackageType.objects.all()  # type: ignore
+    serializer_class = PackageTypeSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['type', 'description']
+    ordering_fields = ['id', 'type']
+    ordering = ['type']
+
+
+class TransportTypeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para el modelo TransportType
+    """
+    queryset = TransportType.objects.all()  # type: ignore
+    serializer_class = TransportTypeSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['type', 'description']
+    ordering_fields = ['id', 'type']
+    ordering = ['type']
+
+
+class MeasureUnitViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para el modelo MeasureUnit
+    """
+    queryset = MeasureUnit.objects.all()  # type: ignore
+    serializer_class = MeasureUnitSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['measure_unit', 'description']
+    ordering_fields = ['id', 'measure_unit']
+    ordering = ['measure_unit']
+
+
+class InstructionTypeViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para el modelo InstructionType
+    """
+    queryset = InstructionType.objects.all()  # type: ignore
+    serializer_class = InstructionTypeSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['is_deleted', 'is_confirmed']
+    search_fields = ['type', 'description']
+    ordering_fields = ['id', 'type', 'created_at']
+    ordering = ['type']
+
+    def perform_create(self, serializer):
+        if hasattr(self.request.user, 'code'):
+            serializer.save(created_by=self.request.user.code)
+        else:
+            serializer.save(created_by='system')
