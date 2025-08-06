@@ -28,7 +28,7 @@
     ██  ║    ┌─────────────────────────────────────────────┐    ║  ██
     ██  ║    │  > SBM Official API                         │    ║  ██
     ██  ║    │  > Users, Finance, Operational, Providers   │    ║  ██
-    ██  ║    │  > BASIC CRUD                               │    ║  ██
+    ██  ║    │  > COMPLETE CRUD                            │    ║  ██
     ██  ║    │  > users, login and token validation        │    ║  ██
     ██  ║    │  > STATUS: ACTIVE                           │    ║  ██
     ██  ║    └─────────────────────────────────────────────┘    ║  ██
@@ -57,7 +57,7 @@
 2. [Arquitectura del Sistema](#arquitectura-del-sistema)
 3. [Configuración del Proyecto](#configuración-del-proyecto)
 4. [Base de Datos](#base-de-datos)
-5. [Aplicación Core](#aplicación-core)
+5. [Aplicaciones del Sistema](#aplicaciones-del-sistema)
 6. [API Endpoints](#api-endpoints)
 7. [Autenticación y Permisos](#autenticación-y-permisos)
 8. [Configuración de Docker](#configuración-de-docker)
@@ -70,7 +70,7 @@
 
 ## 1. Descripción General
 
-**SBM-API** es una API REST desarrollada en Django que proporciona servicios básicos del sistema. La API está diseñada para ser consumida por aplicaciones frontend y otros servicios.
+**SBM-API** es una API REST completa desarrollada en Django que proporciona servicios integrales para la gestión de franquicias, catálogos, usuarios, contabilidad, inventario, ventas y más. La API está diseñada para ser consumida por aplicaciones frontend y otros servicios.
 
 ### Características Principales
 - ✅ API REST completa con Django REST Framework
@@ -78,7 +78,9 @@
 - ✅ Base de datos PostgreSQL con múltiples esquemas
 - ✅ Documentación automática con Django Jazzmin
 - ✅ Configuración Docker completa
-- ✅ Endpoints de información y salud del sistema
+- ✅ Múltiples módulos de negocio
+- ✅ Sistema de permisos y roles
+- ✅ Gestión de precios y configuración fiscal
 
 ---
 
@@ -93,13 +95,24 @@ SBM-API/
 │   ├── views.py            # Vistas del proyecto
 │   ├── wsgi.py             # Configuración WSGI
 │   ├── asgi.py             # Configuración ASGI
-│   ├── Dockerfile          # Imagen Docker (PostgreSQL)
+│   ├── Dockerfile          # Imagen Docker
 │   ├── entrypoint.sh       # Script de inicio
 │   └── requirements.txt    # Dependencias Python
-├── templates/               # Templates HTML
-├── manage.py                # Comando Django (raíz)
-├── docker-compose.yml       # Configuración Docker
-└── .env                     # Variables de entorno
+├── franchise/              # Gestión de franquicias
+├── catalog/                # Gestión de catálogo y productos
+├── users/                  # Gestión de usuarios
+├── accounting/             # Gestión contable
+├── support/                # Sistema de soporte
+├── price/                  # Gestión de precios
+├── config/                 # Configuraciones del sistema
+├── fiscal/                 # Gestión fiscal
+├── inventory/              # Gestión de inventario
+├── sales/                  # Gestión de ventas
+├── templates/              # Templates HTML
+├── manage.py               # Comando Django (raíz)
+├── docker-compose.yml      # Configuración Docker
+├── requirements.txt        # Dependencias Python
+└── .env                    # Variables de entorno
 ```
 
 ### Tecnologías Utilizadas
@@ -162,6 +175,16 @@ INSTALLED_APPS = [
     'rest_framework',             # API REST
     'corsheaders',                # CORS
     'django_filters',             # Filtros
+    'franchise',                  # Gestión de franquicias
+    'catalog',                    # Gestión de catálogo
+    'accounting',                 # Gestión contable
+    'support',                    # Sistema de soporte
+    'price',                      # Gestión de precios
+    'config',                     # Configuraciones
+    'fiscal',                     # Gestión fiscal
+    'inventory',                  # Gestión de inventario
+    'sales',                      # Gestión de ventas
+    'users',                      # Gestión de usuarios
 ]
 ```
 
@@ -216,6 +239,36 @@ REST_FRAMEWORK = {
 - **Esquemas**: `ditaly_pasta`, `sbm_business`, `public`
 - **Conexión**: Configurada para Docker con red externa
 
+### Esquemas de Base de Datos
+
+#### Esquema `sbm_business`
+- **Franquicias**: `franchise`, `franchise_state`
+- **Usuarios**: `user`, `user_token`, `user_type`
+- **Permisos**: `role`, `permission`, `role_permissions`, `restriction`, `restriction_roles`
+- **Configuración**: `franchise_configuration_type`
+- **Catálogo**: `menu`, `item_group`, `item_category`, `item_type`, `package_type`, `transport_type`, `measure_unit`, `provider_type`, `instruction_type`, `permission_type`, `bank_account_type`, `district`, `region`, `fiscal_directive_type`
+- **Bancos**: `bank`
+- **Fiscal**: `fiscal_directive`
+- **Precios**: `price_type`, `variable_formula`
+
+#### Esquema `ditaly_pasta`
+- **Configuración**: `franchise_configuration`, `franchise_configuration_detail`
+- **Catálogo**: `catalog`
+- **Productos**: `product`, `material`, `service`
+- **Configuración de Items**: `item_configuration`, `item_configuration_detail`
+- **Paquetes**: `package`
+- **Precios**: `price`, `price_configuration`, `fiscal_configuration_detail`
+- **Proveedores**: `provider`
+
+#### Esquema `accounting`
+- **Cuentas**: `accounting_account`
+- **Diarios**: `accounting_journal`
+- **Períodos**: `accounting_period`
+- **Transacciones**: `accounting_transaction`, `accounting_entry`
+- **Cierres**: `accounting_closure`
+- **Reportes**: `accounting_tax_report`
+- **Enlaces**: `accounting_invoice_link`, `accounting_fiscal_directive_link`
+
 ### Tablas del Sistema Django
 - `django_admin_log` - Logs del admin
 - `django_content_type` - Tipos de contenido
@@ -229,20 +282,95 @@ REST_FRAMEWORK = {
 
 ---
 
-## 5. Aplicación Core
+## 5. Aplicaciones del Sistema
 
-### Funcionalidades Principales
+### Core
+**Funcionalidades Principales:**
 - **Gestión de configuración**: Configuración centralizada del proyecto
 - **URLs principales**: Enrutamiento de endpoints básicos
 - **Vistas del sistema**: Endpoints de información y salud
 - **Admin personalizado**: Interfaz de administración con Jazzmin
 
-### Archivos Principales
-- `settings.py`: Configuración completa del proyecto
-- `urls.py`: Enrutamiento de URLs principales
-- `views.py`: Vistas y endpoints del sistema
-- `wsgi.py`: Configuración WSGI para producción
-- `asgi.py`: Configuración ASGI para async
+### Franchise
+**Gestión de Franquicias:**
+- **Franquicias**: CRUD completo de franquicias
+- **Estados**: Gestión de estados de franquicias
+- **Configuraciones**: Configuraciones específicas por franquicia
+- **Detalles de configuración**: Detalles de configuraciones
+
+### Catalog
+**Gestión de Catálogo y Productos:**
+- **Catálogo**: Productos del catálogo con imágenes y configuraciones
+- **Productos**: Gestión de productos del sistema
+- **Materiales**: Gestión de materiales
+- **Servicios**: Gestión de servicios
+- **Menús**: Organización de menús
+- **Grupos y Categorías**: Clasificación de items
+- **Tipos**: Tipos de items y configuraciones
+- **Restricciones**: Sistema de restricciones
+- **Instrucciones**: Instrucciones de uso y manejo
+- **Proveedores**: Gestión de proveedores
+- **Bancos**: Información bancaria
+- **Regiones y Distritos**: Ubicaciones geográficas
+- **Configuraciones de Items**: Configuraciones específicas
+- **Paquetes**: Gestión de empaques y transporte
+
+### Users
+**Gestión de Usuarios:**
+- **Usuarios**: CRUD completo de usuarios
+- **Tokens**: Gestión de tokens de autenticación
+- **Tipos de usuario**: Clasificación de usuarios
+
+### Accounting
+**Gestión Contable:**
+- **Cuentas**: Plan de cuentas contables
+- **Diarios**: Diarios contables
+- **Períodos**: Períodos contables
+- **Transacciones**: Asientos contables
+- **Cierres**: Cierres de períodos
+- **Reportes**: Reportes fiscales
+- **Enlaces**: Enlaces con facturas y directivas fiscales
+
+### Support
+**Sistema de Soporte:**
+- **Tickets**: Gestión de tickets de soporte
+- **Categorías**: Categorización de tickets
+- **Estados**: Estados de tickets
+- **Asignaciones**: Asignación de tickets
+
+### Price
+**Gestión de Precios:**
+- **Precios**: Configuración de precios
+- **Tipos de precio**: Clasificación de precios
+- **Configuraciones**: Configuraciones de precios
+- **Fórmulas**: Fórmulas de cálculo
+
+### Config
+**Configuraciones del Sistema:**
+- **Parámetros**: Parámetros del sistema
+- **Configuraciones**: Configuraciones generales
+- **Plantillas**: Plantillas de configuración
+
+### Fiscal
+**Gestión Fiscal:**
+- **Directivas**: Directivas fiscales
+- **Tipos**: Tipos de directivas
+- **Configuraciones**: Configuraciones fiscales
+- **Reportes**: Reportes fiscales
+
+### Inventory
+**Gestión de Inventario:**
+- **Stock**: Control de stock
+- **Movimientos**: Movimientos de inventario
+- **Ubicaciones**: Ubicaciones de almacén
+- **Categorías**: Categorización de inventario
+
+### Sales
+**Gestión de Ventas:**
+- **Ventas**: Registro de ventas
+- **Clientes**: Gestión de clientes
+- **Facturas**: Facturación
+- **Pedidos**: Gestión de pedidos
 
 ---
 
@@ -416,6 +544,60 @@ GET    /                         # Página principal con documentación
 - **Por proveedor:**
   - `GET /api/services/by_provider/?provider_id=1`
 
+### Usuarios (Users)
+
+- **Listar usuarios:**
+  - `GET /api/users/`
+
+- **Crear usuario:**
+  - `POST /api/users/`
+
+- **Autenticación:**
+  - `POST /api/users/login/`
+
+### Contabilidad (Accounting)
+
+- **Cuentas contables:**
+  - `GET /api/accounting/accounts/`
+  - `POST /api/accounting/accounts/`
+
+- **Transacciones:**
+  - `GET /api/accounting/transactions/`
+  - `POST /api/accounting/transactions/`
+
+- **Reportes:**
+  - `GET /api/accounting/reports/`
+
+### Precios (Price)
+
+- **Configuraciones de precio:**
+  - `GET /api/prices/configurations/`
+  - `POST /api/prices/configurations/`
+
+- **Precios:**
+  - `GET /api/prices/`
+  - `POST /api/prices/`
+
+### Inventario (Inventory)
+
+- **Stock:**
+  - `GET /api/inventory/stock/`
+  - `POST /api/inventory/stock/`
+
+- **Movimientos:**
+  - `GET /api/inventory/movements/`
+  - `POST /api/inventory/movements/`
+
+### Ventas (Sales)
+
+- **Ventas:**
+  - `GET /api/sales/`
+  - `POST /api/sales/`
+
+- **Clientes:**
+  - `GET /api/sales/customers/`
+  - `POST /api/sales/customers/`
+
 ### Ejemplos de Uso
 
 #### Verificar estado de la API
@@ -466,6 +648,12 @@ curl http://localhost:8082/api/info/
 - **Admin**: Acceso completo al panel de administración
 - **API**: Autenticación requerida para endpoints protegidos
 - **Documentación**: Acceso público a endpoints de información
+
+### Sistema de Roles y Permisos
+- **Roles**: Definición de roles de usuario
+- **Permisos**: Permisos específicos por funcionalidad
+- **Restricciones**: Restricciones de acceso
+- **Asignaciones**: Asignación de permisos a roles
 
 ---
 
@@ -587,8 +775,8 @@ DATABASES = {
 ### Estructura de Desarrollo
 
 #### Agregar nuevas funcionalidades
-1. Crear nuevas vistas en `core/views.py`
-2. Agregar URLs en `core/urls.py`
+1. Crear nuevas vistas en la aplicación correspondiente
+2. Agregar URLs en el archivo `urls.py` de la aplicación
 3. Configurar serializers si es necesario
 4. Actualizar documentación
 
@@ -609,6 +797,21 @@ DATABASES = {
 #### Nombres de URLs
 - Endpoints: `kebab-case` (ej: `/api/users/`)
 - Acciones: `snake_case` (ej: `/api/users/active/`)
+
+### Estructura de Aplicaciones
+Cada aplicación sigue la estructura estándar de Django:
+```
+app_name/
+├── __init__.py
+├── admin.py
+├── apps.py
+├── models.py
+├── serializers.py
+├── urls.py
+├── views.py
+├── tests.py
+└── migrations/
+```
 
 ---
 
@@ -638,6 +841,14 @@ docker-compose exec api python manage.py dbshell
 ```bash
 # Verificar CORS_ALLOWED_ORIGINS en settings.py
 # Verificar configuración de CORS en el frontend
+```
+
+#### Error de tipos de datos en modelos
+```bash
+# Verificar que los tipos de campos coincidan con la base de datos
+# Ejecutar migraciones si es necesario
+docker-compose exec api python manage.py makemigrations
+docker-compose exec api python manage.py migrate
 ```
 
 ### Comandos de Diagnóstico
@@ -677,21 +888,24 @@ docker-compose exec api python manage.py check
 ---
 
 **Última actualización**: Enero 2025
-**Versión**: 4.0.0
+**Versión**: 5.0.0
 **Mantenido por**: Equipo de Desarrollo SBM-API 
 
-### Cambios en la Versión 4.0.0
-- ✅ Limpieza completa del proyecto - solo aplicación core
-- ✅ Eliminación de todas las aplicaciones de negocio
-- ✅ Simplificación de endpoints y configuración
-- ✅ Actualización de documentación técnica
+### Cambios en la Versión 5.0.0
+- ✅ Estructura completa del proyecto con todas las aplicaciones
+- ✅ Base de datos actualizada con esquemas múltiples
+- ✅ Corrección de tipos de datos en modelos
+- ✅ Sistema completo de permisos y roles
+- ✅ Múltiples módulos de negocio implementados
+- ✅ Documentación técnica actualizada
 - ✅ Configuración Docker optimizada
-- ✅ Endpoints básicos de información y salud del sistema
+- ✅ Endpoints completos para todas las aplicaciones
 
 ### Gestión de Migraciones
 
 #### Estrategia de Migraciones
 - **Aplicaciones del Sistema Django**: Las migraciones están habilitadas para crear tablas del sistema
+- **Aplicaciones de Negocio**: Cada aplicación maneja sus propias migraciones
 
 #### Comando para Ejecutar Migraciones del Sistema
 ```bash

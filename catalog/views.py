@@ -38,7 +38,7 @@ class CatalogViewSet(viewsets.ModelViewSet):
         'is_visible', 'is_deleted', 'is_confirmed', 'chef_recommendation', 'item_group', 'menu'
     ]
     search_fields = [
-        'name', 'description', 'sku', 'code', 'menu__menu'
+        'name', 'description', 'sku', 'code'
     ]
     ordering_fields = ['id', 'name', 'created_at', 'updated_at']
     ordering = ['-id']
@@ -47,7 +47,7 @@ class CatalogViewSet(viewsets.ModelViewSet):
         """
         Optimizar consultas con select_related para datos relacionados
         """
-        return Catalog.objects.select_related('menu', 'item_group', 'category', 'type', 'usage_instructions', 'configuration').all()  # type: ignore
+        return Catalog.objects.select_related('usage_instructions').all()  # type: ignore
 
     @action(detail=False, methods=['get'])
     def visible(self, request):
@@ -92,9 +92,17 @@ class CatalogViewSet(viewsets.ModelViewSet):
             from price.models import Price
             
             # Obtener catálogos usando ORM con select_related para optimizar consultas
-            catalogs = Catalog.objects.select_related(
-                'menu', 'item_group', 'category', 'type', 'usage_instructions', 'configuration'
-            ).all()
+            catalogs = Catalog.objects.select_related('usage_instructions').all()
+            
+            # Obtener datos de las tablas relacionadas para los JOINs
+            from .models import Menu, ItemCategory, ItemGroup, ItemType, ItemConfiguration
+            
+            # Crear diccionarios para mapear IDs a nombres
+            menu_dict = {menu.id: menu.menu for menu in Menu.objects.all()}
+            category_dict = {cat.id: cat.category for cat in ItemCategory.objects.all()}
+            group_dict = {group.id: group.group_name for group in ItemGroup.objects.all()}
+            type_dict = {type_obj.id: type_obj.type for type_obj in ItemType.objects.all()}
+            config_dict = {config.code: config.configuration for config in ItemConfiguration.objects.all()}
             
             # Filtrar catálogos visibles si es necesario
             if request.query_params.get('visible_only') == 'true':
@@ -113,18 +121,18 @@ class CatalogViewSet(viewsets.ModelViewSet):
                     result = {
                         'sku': catalog.sku,
                         'cover_image': catalog.cover_image,
-                        'menu': catalog.menu.id if catalog.menu else None,
-                        'menu_name': catalog.menu.menu if catalog.menu else None,
-                        'category': catalog.category.id if catalog.category else None,
-                        'category_name': catalog.category.category if catalog.category else None,
+                        'menu': catalog.menu,
+                        'menu_name': menu_dict.get(catalog.menu),
+                        'category': catalog.category,
+                        'category_name': category_dict.get(catalog.category),
                         'name': catalog.name,
                         'description': catalog.description,
                         'obs': catalog.obs,
                         'chef_recommendation': catalog.chef_recommendation,
-                        'item_type': catalog.type.id if catalog.type else None,
-                        'type_name': catalog.type.type if catalog.type else None,
-                        'item_group': catalog.item_group.id if catalog.item_group else None,
-                        'group_name': catalog.item_group.group_name if catalog.item_group else None,
+                        'item_type': catalog.type,
+                        'type_name': type_dict.get(catalog.type),
+                        'item_group': catalog.item_group,
+                        'group_name': group_dict.get(catalog.item_group),
                         'base_net_amount': price_obj.base_net_amount if price_obj else None,
                         'net_amount': price_obj.net_amount if price_obj else None,
                         'gross_amount': price_obj.gross_amount if price_obj else None,
@@ -134,8 +142,8 @@ class CatalogViewSet(viewsets.ModelViewSet):
                         'price_configuration': price_obj.price_configuration if price_obj else None,
                         'min_quantity_purchase': catalog.min_quantity_purchase,
                         'rations_quantity': catalog.rations_quantity,
-                        'item_configuration': catalog.configuration.code if catalog.configuration else None,
-                        'configuration': catalog.configuration.configuration if catalog.configuration else None,
+                        'item_configuration': catalog.configuration,
+                        'configuration': config_dict.get(catalog.configuration),
                         'is_visible': catalog.is_visible,
                         'is_confirmed': catalog.is_confirmed,
                         'created_at': catalog.created_at,
