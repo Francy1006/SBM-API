@@ -192,6 +192,7 @@ CORS_ALLOW_ALL_ORIGINS = True  # Solo para desarrollo
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = str(env("CORS_ALLOWED_ORIGINS")).split(",") + [
     'http://localhost:8080',
+    'http://localhost:8082',
     'http://sbm_manager:8080',
     'http://sbm-core:8082'
 ]
@@ -305,3 +306,8 @@ JAZZMIN_UI_TWEAKS = {
         "success": "btn-success"
     }
 }
+
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8082",
+]

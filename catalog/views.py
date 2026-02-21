@@ -50,11 +50,20 @@ from .serializers import (
 class CatalogViewSet(viewsets.ModelViewSet):
     queryset = Catalog.objects.all()  # type: ignore
     serializer_class = CatalogSerializer
-    lookup_field = "code"
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["is_visible", "is_deleted", "is_confirmed", "chef_recommendation", "item_group", "menu"]
+    lookup_field = "sku"
+    lookup_value_regex = r"[^/]+"
 
-    # FIX: permitir search por menu_name ("menu__menu"), etc.
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+
+    filterset_fields = [
+        "is_visible",
+        "is_deleted",
+        "is_confirmed",
+        "chef_recommendation",
+        "item_group",
+        "menu",
+    ]
+
     search_fields = [
         "name",
         "description",
@@ -65,142 +74,106 @@ class CatalogViewSet(viewsets.ModelViewSet):
         "category__category",
         "type__type",
     ]
-    ordering_fields = ["id", "name", "created_at", "updated_at"]
+
+    ordering_fields = [
+        "id",
+        "name",
+        "sku",
+        "created_at",
+        "is_visible",
+        "is_confirmed",
+        "menu__menu",
+        "item_group__group_name",
+        "category__category",
+        "type__type",
+    ]
+
     ordering = ["-id"]
 
     def get_queryset(self):
-        return (
-            Catalog.objects.select_related(
-                "menu",
-                "item_group",
-                "category",
-                "type",
-                "restriction",
-                "usage_instructions",
-                "configuration",
-                "price",
-            ).all()
-        )  # type: ignore
+        return Catalog.objects.select_related(
+            "menu",
+            "item_group",
+            "category",
+            "type",
+            "restriction",
+            "usage_instructions",
+            "configuration",
+            "price",
+        )
 
-    def perform_create(self, serializer):
-        try:
-            import uuid
-            from django.utils import timezone
-            from price.models import PriceConfiguration
+    # Alias para ordenar desde Vue por nombres visibles
+    def _apply_ordering_aliases(self, request, qs):
+        ordering = request.query_params.get("ordering")
+        if not ordering:
+            return qs
 
-            with transaction.atomic():
-                package = self.request.data.get("package")
-                if not package:
-                    raise ValueError("El campo 'package' es requerido para crear el catálogo")
-
-                last_config = ItemConfiguration.objects.filter(configuration__startswith="C-").order_by(
-                    "-configuration"
-                ).first()
-
-                if last_config:
-                    last_number = int(last_config.configuration.split("-")[1])
-                    new_number = last_number + 1
-                else:
-                    new_number = 1
-
-                new_config_code = f"C-{new_number:03d}"
-
-                try:
-                    package_instance = Package.objects.get(id=package)
-                except Package.DoesNotExist:
-                    raise ValueError(f"El package con ID {package} no existe")
-
-                item_config = ItemConfiguration.objects.create(
-                    code=str(uuid.uuid4()),
-                    configuration=new_config_code,
-                    description=serializer.validated_data.get("description", ""),
-                    package=package_instance,
-                )
-
-                serializer.validated_data["configuration"] = item_config
-
-                price_data = serializer.context.get("price_data")
-                if not price_data:
-                    price_config = PriceConfiguration.objects.filter(price_type=4).first()
-                    if not price_config:
-                        raise ValueError(
-                            "No se encontró una configuración de precio válida para catálogos (price_type=4)."
-                        )
-                    price_data = {"base_net_amount": 1, "price_configuration": price_config.code}
-
-                price_code = str(uuid.uuid4())
-                price_obj = Price._default_manager.create(
-                    code=price_code,
-                    base_net_amount=price_data["base_net_amount"],
-                    gross_amount=0,
-                    iva_amount=0,
-                    retention_amount=0,
-                    price_configuration=price_data["price_configuration"],
-                    created_by="5fbf2886-4ad0-11f0-8ce6-0242ac120002",
-                    created_at=timezone.now(),
-                    price_record_type=4,
-                )
-
-                serializer.validated_data["price"] = price_obj
-
-                catalog = serializer.save(created_by="5fbf2886-4ad0-11f0-8ce6-0242ac120002")
-
-                price_obj.record_item_code = catalog.code
-                price_obj.save()
-
-        except Exception as e:
-            print(f"Error creando item-configuration y price: {str(e)}")
-            raise
-
-    @action(detail=False, methods=["get"])
-    def visible(self, request):
-        queryset = self.get_queryset().filter(is_visible=True, is_deleted=False)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=["get"])
-    def chef_recommendations(self, request):
-        queryset = self.get_queryset().filter(chef_recommendation=True, is_visible=True)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
-
-    @action(detail=False, methods=["get"], url_path="foreign-keys-by-code")
-    def foreign_keys_by_code(self, request):
-        code = request.query_params.get("code")
-        if not code:
-            return Response({"detail": "code param is required."}, status=400)
-        try:
-            catalog = Catalog.objects.get(code=code)  # type: ignore
-        except Catalog.DoesNotExist:  # type: ignore
-            return Response({"detail": "Catalog not found."}, status=404)
-
-        data = {
-            "menu_id": catalog.menu_id,
-            "item_group_id": catalog.item_group_id,
-            "category_id": catalog.category_id,
-            "type_id": catalog.type_id,
-            "restriction_id": catalog.restriction_id,
+        alias_map = {
+            "menu_name": "menu__menu",
+            "category_name": "category__category",
+            "group_name": "item_group__group_name",
+            "type_name": "type__type",
+            "configuration": "configuration__configuration",
         }
-        return Response(data)
+
+        fields = [f.strip() for f in ordering.split(",") if f.strip()]
+        translated = []
+
+        for f in fields:
+            desc = f.startswith("-")
+            key = f[1:] if desc else f
+            real_field = alias_map.get(key, key)
+            translated.append(f"-{real_field}" if desc else real_field)
+
+        return qs.order_by(*translated)
+
+    @action(detail=False, methods=["post"], url_path="soft_delete")
+    def soft_delete(self, request):
+        ids = request.data.get("ids", [])
+        if not isinstance(ids, list) or not ids:
+            return Response(
+                {"detail": "ids debe ser una lista con al menos 1 elemento"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        updated = Catalog.objects.filter(sku__in=ids).update(
+            is_deleted=True, is_visible=False
+        )  # code=sku en la lista
+        return Response({"deleted": updated}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="list")
     def catalog_list(self, request):
         try:
-            catalogs = self.filter_queryset(self.get_queryset())
+            qs = self.filter_queryset(self.get_queryset())
+            qs = self._apply_ordering_aliases(request, qs)
 
-            # map dicts (ids -> names)
-            menu_dict = {m.id: m.menu for m in Menu.objects.all()}
-            category_dict = {c.id: c.category for c in ItemCategory.objects.all()}
-            group_dict = {g.id: g.group_name for g in ItemGroup.objects.all()}
-            type_dict = {t.id: t.type for t in ItemType.objects.all()}
-            config_dict = {c.code: c.configuration for c in ItemConfiguration.objects.all()}
+            page_qs = self.paginate_queryset(qs)
+            if page_qs is None:
+                page_qs = qs
+
+            # Diccionarios rápidos
+            menu_dict = dict(Menu.objects.values_list("id", "menu"))
+            category_dict = dict(ItemCategory.objects.values_list("id", "category"))
+            group_dict = dict(ItemGroup.objects.values_list("id", "group_name"))
+            type_dict = dict(ItemType.objects.values_list("id", "type"))
+            config_dict = dict(
+                ItemConfiguration.objects.values_list("code", "configuration")
+            )
+
+            # Evitar N+1
+            price_codes = [c.price_id for c in page_qs if c.price_id]
+            price_map = {
+                p.code: p
+                for p in Price.objects.filter(code__in=price_codes, is_current=True)
+            }
 
             results = []
-            for catalog in catalogs:
-                price_obj = Price.objects.filter(code=catalog.price_id, is_current=True).first()
+            for catalog in page_qs:
+                price_obj = price_map.get(catalog.price_id)
 
                 results.append(
                     {
+                        "code": catalog.sku,
                         "sku": catalog.sku,
                         "cover_image": catalog.cover_image,
                         "menu": catalog.menu_id,
@@ -215,18 +188,25 @@ class CatalogViewSet(viewsets.ModelViewSet):
                         "type_name": type_dict.get(catalog.type_id),
                         "item_group": catalog.item_group_id,
                         "group_name": group_dict.get(catalog.item_group_id),
-                        "base_net_amount": price_obj.base_net_amount if price_obj else None,
-                        "net_amount": price_obj.net_amount if price_obj else None,
-                        "gross_amount": price_obj.gross_amount if price_obj else None,
-                        "iva_amount": price_obj.iva_amount if price_obj else None,
-                        "aditional_tax_amount": getattr(price_obj, "aditional_tax_amount", None) if price_obj else None,
-                        "retention_amount": price_obj.retention_amount if price_obj else None,
-                        "price_configuration": price_obj.price_configuration if price_obj else None,
+                        "base_net_amount": getattr(price_obj, "base_net_amount", None),
+                        "net_amount": getattr(price_obj, "net_amount", None),
+                        "gross_amount": getattr(price_obj, "gross_amount", None),
+                        "iva_amount": getattr(price_obj, "iva_amount", None),
+                        "aditional_tax_amount": getattr(
+                            price_obj, "aditional_tax_amount", None
+                        ),
+                        "retention_amount": getattr(
+                            price_obj, "retention_amount", None
+                        ),
+                        "price_configuration": getattr(
+                            price_obj, "price_configuration", None
+                        ),
                         "min_quantity_purchase": catalog.min_quantity_purchase,
                         "rations_quantity": catalog.rations_quantity,
                         "item_configuration": catalog.configuration_id,
                         "configuration": config_dict.get(catalog.configuration_id),
                         "is_visible": catalog.is_visible,
+                        "is_deleted": catalog.is_deleted,
                         "is_confirmed": catalog.is_confirmed,
                         "created_at": catalog.created_at,
                     }
@@ -234,45 +214,197 @@ class CatalogViewSet(viewsets.ModelViewSet):
 
             verbose_names = {
                 "sku": "SKU",
-                "cover_image": "Imagen",
-                "menu": "Menú (ID)",
                 "menu_name": "Menú",
-                "category": "Categoría (ID)",
                 "category_name": "Categoría",
                 "name": "Nombre",
-                "description": "Descripción",
-                "obs": "Obs",
-                "chef_recommendation": "Recomendación Chef",
-                "item_type": "Tipo (ID)",
-                "type_name": "Tipo",
-                "item_group": "Grupo (ID)",
                 "group_name": "Grupo",
+                "type_name": "Tipo",
                 "base_net_amount": "Valor Base Neto",
                 "net_amount": "Valor Neto",
                 "gross_amount": "Valor Bruto",
-                "iva_amount": "IVA",
-                "aditional_tax_amount": "Impuesto Adicional",
-                "retention_amount": "Retención",
-                "price_configuration": "Configuración Precio",
-                "min_quantity_purchase": "Compra Mínima",
-                "rations_quantity": "Raciones",
-                "item_configuration": "Item Config (Code)",
-                "configuration": "Configuración",
                 "is_visible": "Visible",
                 "is_confirmed": "Confirmado",
                 "created_at": "Creado",
             }
 
-            page = self.paginate_queryset(results)
-            if page is not None:
-                ser = CatalogListSerializer(page, many=True)
-                return self.get_paginated_response({"results": ser.data, "verbose_names": verbose_names})
+            if hasattr(self, "paginator") and self.paginator is not None:
+                return self.get_paginated_response(
+                    {"results": results, "verbose_names": verbose_names}
+                )
 
-            ser = CatalogListSerializer(results, many=True)
-            return Response({"results": ser.data, "verbose_names": verbose_names})
+            return Response({"results": results, "verbose_names": verbose_names})
 
         except Exception as e:
-            return Response({"error": f"Error obteniendo lista de catálogos: {str(e)}"}, status=500)
+            return Response(
+                {"error": f"Error obteniendo lista de catálogos: {str(e)}"},
+                status=500,
+            )
+        # REF: CATALOG_ADV_ENDPOINT_001
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path=r"adv/(?P<sku>[^/.]+)",
+    )
+    def adv(self, request, sku=None):
+        """
+        GET /api/catalogs/adv/{sku}
+        Devuelve campos adicionales (nombres y metadata) resolviendo llaves foráneas.
+        """
+        try:
+            catalog = self.get_queryset().filter(sku=sku).first()
+            if not catalog:
+                return Response(
+                    {"detail": "Catálogo no encontrado."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+            # PRICE (ya viene en select_related('price'))
+            price_obj = getattr(catalog, "price", None)
+
+            # INSTRUCTIONS (ya viene select_related('usage_instructions'))
+            instr = getattr(catalog, "usage_instructions", None)
+            instr_type = getattr(instr, "type", None) if instr else None
+
+            # RESTRICTION (ya viene select_related('restriction'))
+            restriction = getattr(catalog, "restriction", None)
+
+            # CONFIGURATION (ya viene select_related('configuration'))
+            cfg = getattr(catalog, "configuration", None)
+            pkg = getattr(cfg, "package", None) if cfg else None
+            pkg_type = getattr(pkg, "package_type", None) if pkg else None
+            transport_type = getattr(pkg, "transport_type", None) if pkg else None
+            measure_unit = getattr(pkg, "measure_unit", None) if pkg else None
+            storage_instr = getattr(pkg, "storage_instructions", None) if pkg else None
+            transport_instr = (
+                getattr(pkg, "transport_instructions", None) if pkg else None
+            )
+
+            advanced = {
+                # Catálogo: campos extra útiles
+                "code_uuid": getattr(catalog, "code", None),
+                "obs": getattr(catalog, "obs", None),
+                "secondary_image": getattr(catalog, "secondary_image", None),
+                "complementary_image": getattr(catalog, "complementary_image", None),
+                "image_gallery": getattr(catalog, "image_gallery", None),
+                # Menú / Grupo / Categoría / Tipo (labels extra, aunque ya tengas *_name en list)
+                "menu_description": getattr(
+                    getattr(catalog, "menu", None), "description", None
+                ),
+                "group_description": getattr(
+                    getattr(catalog, "item_group", None), "description", None
+                ),
+                "category_description": getattr(
+                    getattr(catalog, "category", None), "description", None
+                ),
+                "type_description": getattr(
+                    getattr(catalog, "type", None), "description", None
+                ),
+                # Restricción
+                "restriction_name": getattr(restriction, "restriction", None),
+                "restriction_description": getattr(restriction, "description", None),
+                # Instrucciones de uso
+                "usage_instruction": getattr(instr, "instruction", None),
+                "usage_instruction_description": getattr(instr, "description", None),
+                "usage_instruction_url": getattr(instr, "url_documentation", None),
+                "usage_instruction_type_id": getattr(instr, "type_id", None),
+                "usage_instruction_type_name": getattr(instr_type, "type", None),
+                # Precio
+                "price_code": getattr(price_obj, "code", None),
+                "price_configuration": getattr(price_obj, "price_configuration", None),
+                "base_net_amount": getattr(price_obj, "base_net_amount", None),
+                "net_amount": getattr(price_obj, "net_amount", None),
+                "gross_amount": getattr(price_obj, "gross_amount", None),
+                "iva_amount": getattr(price_obj, "iva_amount", None),
+                "aditional_tax_amount": getattr(
+                    price_obj, "aditional_tax_amount", None
+                ),
+                "retention_amount": getattr(price_obj, "retention_amount", None),
+                "price_is_current": getattr(price_obj, "is_current", None),
+                # Configuración / Package (para tu sección “Configuración” después)
+                "configuration_code": getattr(cfg, "code", None),
+                "configuration_name": getattr(cfg, "configuration", None),
+                "configuration_description": getattr(cfg, "description", None),
+                "package_id": getattr(pkg, "id", None),
+                "package_description": getattr(pkg, "description", None),
+                "package_type_id": getattr(pkg, "package_type_id", None),
+                "package_type_name": getattr(pkg_type, "type", None),
+                "transport_type_id": getattr(pkg, "transport_type_id", None),
+                "transport_type_name": getattr(transport_type, "type", None),
+                "size": getattr(pkg, "size", None),
+                "weight": getattr(pkg, "weight", None),
+                "measure_unit_id": getattr(pkg, "measure_unit_id", None),
+                "measure_unit_name": getattr(measure_unit, "measure_unit", None),
+                "quantity_unit": getattr(pkg, "quantity_unit", None),
+                "storage_instruction": getattr(storage_instr, "instruction", None),
+                "storage_instruction_url": getattr(
+                    storage_instr, "url_documentation", None
+                ),
+                "transport_instruction": getattr(transport_instr, "instruction", None),
+                "transport_instruction_url": getattr(
+                    transport_instr, "url_documentation", None
+                ),
+            }
+
+            # Limpia None para que el front no se llene de “-” innecesario si quieres
+            advanced = {k: v for k, v in advanced.items() if v is not None}
+
+            verbose_names = {
+                "code_uuid": "Código UUID",
+                "obs": "Observaciones",
+                "secondary_image": "Imagen secundaria",
+                "complementary_image": "Imagen complementaria",
+                "image_gallery": "Galería de imágenes",
+                "menu_description": "Descripción menú",
+                "group_description": "Descripción grupo",
+                "category_description": "Descripción categoría",
+                "type_description": "Descripción tipo",
+                "restriction_name": "Restricción",
+                "restriction_description": "Descripción restricción",
+                "usage_instruction": "Instrucción de uso",
+                "usage_instruction_description": "Detalle instrucción",
+                "usage_instruction_url": "URL documentación",
+                "usage_instruction_type_id": "Tipo instrucción (ID)",
+                "usage_instruction_type_name": "Tipo instrucción",
+                "price_code": "Código precio",
+                "price_configuration": "Config. precio (code)",
+                "base_net_amount": "Valor base neto",
+                "net_amount": "Valor neto",
+                "gross_amount": "Valor bruto",
+                "iva_amount": "IVA",
+                "aditional_tax_amount": "Impuesto adicional",
+                "retention_amount": "Retención",
+                "price_is_current": "Precio vigente",
+                "configuration_code": "Código configuración",
+                "configuration_name": "Configuración",
+                "configuration_description": "Detalle configuración",
+                "package_id": "Package (ID)",
+                "package_description": "Descripción package",
+                "package_type_id": "Tipo package (ID)",
+                "package_type_name": "Tipo package",
+                "transport_type_id": "Tipo transporte (ID)",
+                "transport_type_name": "Tipo transporte",
+                "size": "Tamaño",
+                "weight": "Peso",
+                "measure_unit_id": "Unidad medida (ID)",
+                "measure_unit_name": "Unidad medida",
+                "quantity_unit": "Cantidad unidad",
+                "storage_instruction": "Instr. almacenamiento",
+                "storage_instruction_url": "URL instr. almacenamiento",
+                "transport_instruction": "Instr. transporte",
+                "transport_instruction_url": "URL instr. transporte",
+            }
+
+            return Response(
+                {"results": advanced, "verbose_names": verbose_names},
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"detail": f"Error obteniendo avanzado: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -280,7 +412,15 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
     lookup_field = "sku"
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["is_active", "is_deleted", "is_confirmed", "provider", "type", "item_group", "category"]
+    filterset_fields = [
+        "is_active",
+        "is_deleted",
+        "is_confirmed",
+        "provider",
+        "type",
+        "item_group",
+        "category",
+    ]
     search_fields = ["description", "sku", "code", "obs"]
     ordering_fields = ["id", "description", "created_at", "updated_at"]
     ordering = ["-id"]
@@ -319,7 +459,9 @@ class ProductViewSet(viewsets.ModelViewSet):
                 )
 
         except Exception as e:
-            print(f"Error executing price calculation for product {product.sku}: {str(e)}")
+            print(
+                f"Error executing price calculation for product {product.sku}: {str(e)}"
+            )
 
     def partial_update(self, request, *args, **kwargs):
         price_data = request.data.get("price_data", None)
@@ -335,9 +477,13 @@ class ProductViewSet(viewsets.ModelViewSet):
             price_configuration_new = price_data.get("price_configuration")
 
             changed = False
-            if base_net_amount_new is not None and str(price_obj.base_net_amount) != str(base_net_amount_new):
+            if base_net_amount_new is not None and str(
+                price_obj.base_net_amount
+            ) != str(base_net_amount_new):
                 changed = True
-            if price_configuration_new is not None and str(price_obj.price_configuration) != str(price_configuration_new):
+            if price_configuration_new is not None and str(
+                price_obj.price_configuration
+            ) != str(price_configuration_new):
                 changed = True
 
             if changed:
@@ -382,25 +528,43 @@ class ProductViewSet(viewsets.ModelViewSet):
 
             results = []
             for product in products:
-                current_price = Price.objects.filter(code=product.price, is_current=True).first()
+                current_price = Price.objects.filter(
+                    code=product.price, is_current=True
+                ).first()
 
                 price_config = None
                 if current_price:
-                    price_config = PriceConfiguration.objects.filter(code=current_price.price_configuration).first()
+                    price_config = PriceConfiguration.objects.filter(
+                        code=current_price.price_configuration
+                    ).first()
 
                 results.append(
                     {
                         "code": product.code,
                         "sku": product.sku,
                         "description": product.description,
-                        "base_net_amount": current_price.base_net_amount if current_price else 0,
+                        "base_net_amount": (
+                            current_price.base_net_amount if current_price else 0
+                        ),
                         "net_amount": current_price.net_amount if current_price else 0,
-                        "gross_amount": current_price.gross_amount if current_price else 0,
+                        "gross_amount": (
+                            current_price.gross_amount if current_price else 0
+                        ),
                         "iva_amount": current_price.iva_amount if current_price else 0,
-                        "aditional_tax_amount": getattr(current_price, "aditional_tax_amount", 0) if current_price else 0,
-                        "retention_amount": current_price.retention_amount if current_price else 0,
-                        "price_configuration": current_price.price_configuration if current_price else None,
-                        "price_configuration_label": price_config.price_configuration if price_config else None,
+                        "aditional_tax_amount": (
+                            getattr(current_price, "aditional_tax_amount", 0)
+                            if current_price
+                            else 0
+                        ),
+                        "retention_amount": (
+                            current_price.retention_amount if current_price else 0
+                        ),
+                        "price_configuration": (
+                            current_price.price_configuration if current_price else None
+                        ),
+                        "price_configuration_label": (
+                            price_config.price_configuration if price_config else None
+                        ),
                         "obs": product.obs,
                         "package_unit": product.package_unit,
                         "min_package_purchase": product.min_package_purchase,
@@ -455,13 +619,19 @@ class ProductViewSet(viewsets.ModelViewSet):
             page = self.paginate_queryset(results)
             if page is not None:
                 serializer = ProductListSerializer(page, many=True)
-                return self.get_paginated_response({"results": serializer.data, "verbose_names": verbose_names})
+                return self.get_paginated_response(
+                    {"results": serializer.data, "verbose_names": verbose_names}
+                )
 
             serializer = ProductListSerializer(results, many=True)
-            return Response({"results": serializer.data, "verbose_names": verbose_names})
+            return Response(
+                {"results": serializer.data, "verbose_names": verbose_names}
+            )
 
         except Exception as e:
-            return Response({"error": f"Error obteniendo lista de productos: {str(e)}"}, status=500)
+            return Response(
+                {"error": f"Error obteniendo lista de productos: {str(e)}"}, status=500
+            )
 
     @action(detail=False, methods=["get"])
     def active(self, request):
@@ -485,7 +655,15 @@ class MaterialViewSet(viewsets.ModelViewSet):
     queryset = Material.objects.all()  # type: ignore
     serializer_class = MaterialSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["is_active", "is_deleted", "is_confirmed", "provider", "type", "group", "category"]
+    filterset_fields = [
+        "is_active",
+        "is_deleted",
+        "is_confirmed",
+        "provider",
+        "type",
+        "group",
+        "category",
+    ]
     search_fields = ["description", "sku", "code", "obs"]
     ordering_fields = ["id", "description", "created_at", "updated_at"]
     ordering = ["-id"]
@@ -512,7 +690,15 @@ class ServiceViewSet(viewsets.ModelViewSet):
     queryset = Service.objects.all()  # type: ignore
     serializer_class = ServiceSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["is_active", "is_deleted", "is_confirmed", "provider", "type", "group", "category"]
+    filterset_fields = [
+        "is_active",
+        "is_deleted",
+        "is_confirmed",
+        "provider",
+        "type",
+        "group",
+        "category",
+    ]
     search_fields = ["description", "sku", "code", "obs"]
     ordering_fields = ["id", "description", "created_at", "updated_at"]
     ordering = ["-id"]
@@ -546,20 +732,18 @@ class MenuViewSet(viewsets.ModelViewSet):
 
 
 class ItemGroupViewSet(viewsets.ModelViewSet):
-    queryset = ItemGroup.objects.all()  # type: ignore
+    queryset = ItemGroup.objects.all()
     serializer_class = ItemGroupSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["catalog_render"]
     search_fields = ["group_name", "description"]
     ordering_fields = ["id", "group_name"]
     ordering = ["group_name"]
 
 
 class ItemCategoryViewSet(viewsets.ModelViewSet):
-    queryset = ItemCategory.objects.all()  # type: ignore
+    queryset = ItemCategory.objects.all()
     serializer_class = ItemCategorySerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["catalog_render"]
     search_fields = ["category", "description"]
     ordering_fields = ["id", "category"]
     ordering = ["category"]
@@ -585,13 +769,12 @@ class RestrictionViewSet(viewsets.ModelViewSet):
 
 
 class InstructionViewSet(viewsets.ModelViewSet):
-    queryset = Instruction.objects.all()  # type: ignore
+    queryset = Instruction.objects.all()
     serializer_class = InstructionSerializer
     lookup_field = "code"
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["is_deleted", "is_confirmed", "type"]
     search_fields = ["instruction", "description"]
-    ordering_fields = ["code", "instruction", "created_at"]
+    ordering_fields = ["code", "instruction"]
     ordering = ["instruction"]
 
     def perform_create(self, serializer):

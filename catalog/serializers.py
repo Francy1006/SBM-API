@@ -502,14 +502,14 @@ class MenuSerializer(serializers.ModelSerializer):
 class ItemGroupSerializer(serializers.ModelSerializer):
     class Meta:
         model = ItemGroup
-        fields = ["id", "group_name", "description", "catalog_render"]
+        fields = ["id", "group_name", "description"]
         read_only_fields = ["id"]
 
 
 class ItemCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = ItemCategory
-        fields = ["id", "category", "description", "catalog_render"]
+        fields = ["id", "category", "description"]
         read_only_fields = ["id"]
 
 
@@ -530,18 +530,7 @@ class RestrictionSerializer(serializers.ModelSerializer):
 class InstructionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Instruction
-        fields = [
-            "code",
-            "instruction",
-            "description",
-            "url_documentation",
-            "type",
-            "is_deleted",
-            "is_confirmed",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = ["code", "created_at", "updated_at"]
+        fields = "__all__"
 
 
 class CatalogListSerializer(serializers.Serializer):
