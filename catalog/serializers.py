@@ -643,6 +643,12 @@ class ItemConfigurationSerializer(serializers.ModelSerializer):
             "updated_at",
             "confirmed_at",
             "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "log",
+            "version",
         ]
         return {
             field: (
@@ -655,7 +661,13 @@ class ItemConfigurationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         request = self.context.get("request", None)
+
+        # Si el front manda estos campos, los controlamos acá
         validated_data.pop("created_by", None)
+        validated_data.pop("updated_by", None)
+        validated_data.pop("confirmed_by", None)
+        validated_data.pop("deleted_by", None)
+
         user_code = getattr(getattr(request, "user", None), "code", "system")
         now = timezone.now()
 
@@ -665,6 +677,27 @@ class ItemConfigurationSerializer(serializers.ModelSerializer):
             created_at=now,
         )
         return item_config
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request", None)
+        user_code = getattr(getattr(request, "user", None), "code", "system")
+        now = timezone.now()
+
+        # Evitar que el front pise auditoría sensible
+        validated_data.pop("created_by", None)
+        validated_data.pop("created_at", None)
+        validated_data.pop("deleted_by", None)
+        validated_data.pop("deleted_at", None)
+        validated_data.pop("confirmed_by", None)
+        validated_data.pop("confirmed_at", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.updated_by = user_code
+        instance.updated_at = now
+        instance.save()
+        return instance
 
     class Meta:
         model = ItemConfiguration
@@ -680,16 +713,26 @@ class ItemConfigurationSerializer(serializers.ModelSerializer):
             "updated_at",
             "confirmed_at",
             "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "log",
+            "version",
             "field_verbose_names",
         ]
         read_only_fields = [
             "id",
             "code",
             "created_at",
+            "created_by",
             "updated_at",
+            "updated_by",
+            "confirmed_at",
+            "confirmed_by",
             "deleted_at",
+            "deleted_by",
         ]
-
 
 class PackageSerializer(serializers.ModelSerializer):
     field_verbose_names = serializers.SerializerMethodField()

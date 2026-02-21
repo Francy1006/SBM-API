@@ -258,10 +258,26 @@ class ItemConfiguration(models.Model):
     code = models.CharField(max_length=36, unique=True)
     configuration = models.CharField(max_length=50)
     description = models.TextField()
-    package = models.ForeignKey(Package, db_column='package', on_delete=models.CASCADE)
+    package = models.ForeignKey(Package, db_column="package", on_delete=models.CASCADE)
+
+    is_deleted = models.BooleanField(null=True, blank=True)
+    is_confirmed = models.BooleanField(null=True, blank=True)
+
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    created_by = models.CharField(max_length=36)
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True)
+    updated_by = models.CharField(max_length=36, null=True, blank=True)
+    deleted_by = models.CharField(max_length=36, null=True, blank=True)
+
+    log = models.TextField(default="init;")
+    version = models.IntegerField(default=1)
 
     class Meta:
-        db_table = 'item_configuration'
+        db_table = "item_configuration"
 
     def __str__(self):
         return self.configuration
