@@ -12,112 +12,116 @@ https://docs.djangoproject.com/en/4.2/ref/settings/
 
 from pathlib import Path
 import os
-import environ # type: ignore
+import environ  # type: ignore
 
 env = environ.Env()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
 SECRET_KEY = env("SECRET_KEY")
 DEBUG = env("DEBUG")
 ALLOWED_HOSTS = str(env("ALLOWED_HOSTS")).split(",") + [
-    'sbm-manager','sbm_manager', 'localhost', '127.0.0.1', 'sbm-core'
+    "sbm-manager",
+    "sbm_manager",
+    "localhost",
+    "127.0.0.1",
+    "sbm-core",
 ]
 
 # Application definition
 
 BASE_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
 ]
 
 THIRD_APPS = [
-    'rest_framework',
-    'corsheaders',
-    'django_filters',
+    "rest_framework",
+    "corsheaders",
+    "django_filters",
 ]
 
 OWN_APPS = [
-    'franchise',  # Gestión de franquicias
-    'catalog',    # Gestión de catálogo
+    "franchise",  # Gestión de franquicias
+    "catalog",  # Gestión de catálogo
 ]
 
 INSTALLED_APPS = [
-    'jazzmin',  # Django Jazzmin - tema moderno para admin
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'corsheaders',
-    'django_filters',
-    'franchise',  # Gestión de franquicias
-    'catalog',    # Gestión de catálogo
-    'accounting', # Gestión de contabilidad
-    'support',    # Soporte
-    'price',      # Precios
-    'config',     # Configuración
-    'fiscal',     # Fiscal
-    'inventory',  # Inventario
-    'sales',      # Ventas
-    'users',      # Usuarios
+    "jazzmin",  # Django Jazzmin - tema moderno para admin
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "rest_framework",
+    "corsheaders",
+    "django_filters",
+    "franchise",  # Gestión de franquicias
+    "catalog",  # Gestión de catálogo
+    "accounting",  # Gestión de contabilidad
+    "support",  # Soporte
+    "price",  # Precios
+    "config",  # Configuración
+    "fiscal",  # Fiscal
+    "inventory",  # Inventario
+    "sales",  # Ventas
+    "users",  # Usuarios
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Debe ir antes de CommonMiddleware
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "corsheaders.middleware.CorsMiddleware",  # Debe ir antes de CommonMiddleware
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = 'core.urls'
+ROOT_URLCONF = "core.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.debug",
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'core.wsgi.application'
+WSGI_APPLICATION = "core.wsgi.application"
 
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': env("DB_NAME"),
-        'USER': env("DB_USER"),
-        'PASSWORD': env("DB_PASSWORD"),
-        'HOST': env("DB_HOST"),
-        'PORT': env("DB_PORT"),
-        'OPTIONS': {
-            'options': '-c search_path=sbm_business,ditaly_pasta,analytics,public',
-            'connect_timeout': 10,
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env("DB_NAME"),
+        "USER": env("DB_USER"),
+        "PASSWORD": env("DB_PASSWORD"),
+        "HOST": env("DB_HOST"),
+        "PORT": env("DB_PORT"),
+        "OPTIONS": {
+            "options": "-c search_path=sbm_business,ditaly_pasta,analytics,public",
+            "connect_timeout": 10,
         },
     }
 }
@@ -128,16 +132,16 @@ DATABASES = {
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
@@ -162,28 +166,28 @@ STATIC_URL = env("STATIC_URL")
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Django REST Framework Configuration
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'users.authentication.CustomTokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.BasicAuthentication",
+        "users.authentication.CustomTokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
     ],
-    'DEFAULT_FILTER_BACKENDS': [
-        'django_filters.rest_framework.DjangoFilterBackend',
-        'rest_framework.filters.SearchFilter',
-        'rest_framework.filters.OrderingFilter',
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-        'rest_framework.renderers.BrowsableAPIRenderer',
+    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "PAGE_SIZE": 20,
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
     ],
 }
 
@@ -191,14 +195,14 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = True  # Solo para desarrollo
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = str(env("CORS_ALLOWED_ORIGINS")).split(",") + [
-    'http://localhost:8080',
-    'http://localhost:8082',
-    'http://sbm_manager:8080',
-    'http://sbm-core:8082'
+    "http://localhost:8080",
+    "http://localhost:8082",
+    "http://sbm_manager:8080",
+    "http://sbm-core:8082",
 ]
 
 # === Configuración de entorno ===
-DJANGO_ENV = os.environ.get('DJANGO_ENV', 'development')
+DJANGO_ENV = os.environ.get("DJANGO_ENV", "development")
 
 # === Google Auth solo en producción ===
 if DJANGO_ENV == "production":
@@ -214,29 +218,32 @@ if DJANGO_ENV == "production":
 # En desarrollo, Google Auth está desactivado
 
 # === Configuración de usuario de prueba para desarrollo ===
-MOCK_USER_UUID = os.environ.get('MOCK_USER_UUID', 'mock-uuid')
-MOCK_USER_EMAIL = os.environ.get('MOCK_USER_EMAIL', 'mock@example.com')
-MOCK_USER_NAME = os.environ.get('MOCK_USER_NAME', 'MOCKUSER')
-MOCK_USER_TOKEN = os.environ.get('MOCK_USER_TOKEN', 'mock-token')
+MOCK_USER_UUID = os.environ.get("MOCK_USER_UUID", "mock-uuid")
+MOCK_USER_EMAIL = os.environ.get("MOCK_USER_EMAIL", "mock@example.com")
+MOCK_USER_NAME = os.environ.get("MOCK_USER_NAME", "MOCKUSER")
+MOCK_USER_TOKEN = os.environ.get("MOCK_USER_TOKEN", "mock-token")
 
-GOOGLE_CLIENT_ID = os.environ.get('GOOGLE_CLIENT_ID', '815958124165-c4jtlvju3ngm68ecpgqf3k208tqd984f.apps.googleusercontent.com')
+GOOGLE_CLIENT_ID = os.environ.get(
+    "GOOGLE_CLIENT_ID",
+    "815958124165-c4jtlvju3ngm68ecpgqf3k208tqd984f.apps.googleusercontent.com",
+)
 
 # Disable Django migrations for business apps - using Flyway instead
 # Enable migrations only for Django system apps
 MIGRATION_MODULES = {
-    'franchise': None,  # Desactivar migraciones para usar Flyway
-    'catalog': None,    # Desactivar migraciones para usar Flyway
-    'accounting': None, # Desactivar migraciones para usar Flyway
-    'support': None,    # Desactivar migraciones para usar Flyway
-    'price': None,      # Desactivar migraciones para usar Flyway
-    'config': None,     # Desactivar migraciones para usar Flyway
-    'fiscal': None,     # Desactivar migraciones para usar Flyway
-    'inventory': None,  # Desactivar migraciones para usar Flyway
-    'sales': None,      # Desactivar migraciones para usar Flyway
-    'users': None,      # Desactivar migraciones para usar Flyway
+    "franchise": None,  # Desactivar migraciones para usar Flyway
+    "catalog": None,  # Desactivar migraciones para usar Flyway
+    "accounting": None,  # Desactivar migraciones para usar Flyway
+    "support": None,  # Desactivar migraciones para usar Flyway
+    "price": None,  # Desactivar migraciones para usar Flyway
+    "config": None,  # Desactivar migraciones para usar Flyway
+    "fiscal": None,  # Desactivar migraciones para usar Flyway
+    "inventory": None,  # Desactivar migraciones para usar Flyway
+    "sales": None,  # Desactivar migraciones para usar Flyway
+    "users": None,  # Desactivar migraciones para usar Flyway
     # Django system apps - migrations enabled
     # 'admin': None,  # Comentado para permitir migraciones
-    # 'auth': None,   # Comentado para permitir migraciones  
+    # 'auth': None,   # Comentado para permitir migraciones
     # 'contenttypes': None,  # Comentado para permitir migraciones
     # 'sessions': None,  # Comentado para permitir migraciones
 }
@@ -303,8 +310,8 @@ JAZZMIN_UI_TWEAKS = {
         "info": "btn-info",
         "warning": "btn-warning",
         "danger": "btn-danger",
-        "success": "btn-success"
-    }
+        "success": "btn-success",
+    },
 }
 
 

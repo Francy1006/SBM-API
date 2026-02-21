@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from django.db import transaction
 from django.utils import timezone
+from catalog.models import ItemConfiguration
+
 
 from .models import (
     Catalog,
@@ -25,6 +27,7 @@ class CatalogSerializer(serializers.ModelSerializer):
     """
     Serializer para el modelo Catalog con datos relacionados
     """
+
     field_verbose_names = serializers.SerializerMethodField()
     menu_name = serializers.SerializerMethodField()
     item_group_name = serializers.SerializerMethodField()
@@ -33,7 +36,7 @@ class CatalogSerializer(serializers.ModelSerializer):
     restriction_name = serializers.SerializerMethodField()
     usage_instructions_name = serializers.SerializerMethodField()
     configuration_name = serializers.SerializerMethodField()
-    price_data = serializers.DictField(write_only=True, required=False)
+    price_data = serializers.DictField(write_only=True, required=True)
 
     def get_field_verbose_names(self, obj):
         field_names = [
@@ -95,7 +98,9 @@ class CatalogSerializer(serializers.ModelSerializer):
 
     def get_usage_instructions_name(self, obj):
         try:
-            return obj.usage_instructions.instruction if obj.usage_instructions else None
+            return (
+                obj.usage_instructions.instruction if obj.usage_instructions else None
+            )
         except Exception:
             return None
 
@@ -106,27 +111,50 @@ class CatalogSerializer(serializers.ModelSerializer):
             return None
 
     def create(self, validated_data):
+        request = self.context.get("request", None)
         price_data = validated_data.pop("price_data", None)
 
         if not price_data:
-            from price.models import PriceConfiguration
-            price_config = PriceConfiguration.objects.filter(price_type=4).first()
-            if not price_config:
-                raise serializers.ValidationError(
-                    {"price_data": "No se encontró una configuración de precio válida para catálogos (price_type=4)."}
-                )
-            price_data = {"base_net_amount": 1, "price_configuration": price_config.code}
-        else:
-            allowed_fields = {"base_net_amount", "price_configuration"}
-            if set(price_data.keys()) != allowed_fields:
-                raise serializers.ValidationError({"price_data": f"Solo se permiten los campos: {allowed_fields}."})
-            if price_data.get("base_net_amount") in [None, ""]:
-                raise serializers.ValidationError({"price_data": {"base_net_amount": "Este campo es obligatorio."}})
-            if price_data.get("price_configuration") in [None, ""]:
-                raise serializers.ValidationError({"price_data": {"price_configuration": "Este campo es obligatorio."}})
+            raise serializers.ValidationError({"price_data": "Este campo es requerido."})
 
-        self.context["price_data"] = price_data
-        return super().create(validated_data)
+        user_code = getattr(getattr(request, "user", None), "code", None)
+        if not user_code:
+            raise serializers.ValidationError({"created_by": "Usuario inválido."})
+
+        # ✅ configuration es NOT NULL (FK a ItemConfiguration.code)
+        cfg_code = validated_data.get("configuration")
+        if not cfg_code:
+            default_cfg = ItemConfiguration.objects.order_by("-id").first()
+            if not default_cfg:
+                raise serializers.ValidationError({"configuration": "No existe una configuración por defecto para asignar."})
+            validated_data["configuration"] = default_cfg
+        else:
+            try:
+                validated_data["configuration"] = ItemConfiguration.objects.get(code=cfg_code)
+            except ItemConfiguration.DoesNotExist:
+                raise serializers.ValidationError({"configuration": "Configuración inválida."})
+
+        now = timezone.now()
+
+        with transaction.atomic():
+            price = Price.objects.create(
+                base_net_amount=price_data["base_net_amount"],
+                gross_amount=0,
+                iva_amount=0,
+                retention_amount=0,
+                price_configuration=price_data["price_configuration"],
+                created_by=user_code,
+                created_at=now,
+            )
+
+            catalog = Catalog.objects.create(
+                price=price,
+                created_by=user_code,
+                created_at=now,
+                **validated_data
+            )
+
+        return catalog
 
     class Meta:
         model = Catalog
@@ -217,7 +245,8 @@ class ProductSerializer(serializers.ModelSerializer):
                 if field in verbose
                 else (
                     obj._meta.get_field(field).verbose_name
-                    if hasattr(obj._meta, "get_field") and field in [f.name for f in obj._meta.fields]
+                    if hasattr(obj._meta, "get_field")
+                    and field in [f.name for f in obj._meta.fields]
                     else field
                 )
             )
@@ -235,15 +264,23 @@ class ProductSerializer(serializers.ModelSerializer):
         request = self.context.get("request", None)
         price_data = validated_data.pop("price_data", None)
         if not price_data:
-            raise serializers.ValidationError({"price_data": "Este campo es requerido."})
+            raise serializers.ValidationError(
+                {"price_data": "Este campo es requerido."}
+            )
 
         allowed_fields = {"base_net_amount", "price_configuration"}
         if set(price_data.keys()) != allowed_fields:
-            raise serializers.ValidationError({"price_data": f"Solo se permiten los campos: {allowed_fields}."})
+            raise serializers.ValidationError(
+                {"price_data": f"Solo se permiten los campos: {allowed_fields}."}
+            )
         if price_data.get("base_net_amount") in [None, ""]:
-            raise serializers.ValidationError({"price_data": {"base_net_amount": "Este campo es obligatorio."}})
+            raise serializers.ValidationError(
+                {"price_data": {"base_net_amount": "Este campo es obligatorio."}}
+            )
         if price_data.get("price_configuration") in [None, ""]:
-            raise serializers.ValidationError({"price_data": {"price_configuration": "Este campo es obligatorio."}})
+            raise serializers.ValidationError(
+                {"price_data": {"price_configuration": "Este campo es obligatorio."}}
+            )
 
         validated_data.pop("price", None)
         validated_data.pop("created_by", None)
@@ -252,6 +289,7 @@ class ProductSerializer(serializers.ModelSerializer):
         now = timezone.now()
 
         import uuid
+
         with transaction.atomic():
             product_code = str(uuid.uuid4())
             product = Product._default_manager.create(
@@ -382,12 +420,24 @@ class ProductListSerializer(serializers.Serializer):
     code = serializers.CharField()
     sku = serializers.CharField()
     description = serializers.CharField()
-    base_net_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    net_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    gross_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    iva_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    aditional_tax_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    retention_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    base_net_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    net_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    gross_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    iva_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    aditional_tax_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    retention_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
     price_configuration = serializers.CharField(allow_null=True)
     price_configuration_label = serializers.CharField(allow_null=True)
     obs = serializers.CharField(allow_null=True)
@@ -523,8 +573,8 @@ class ItemTypeSerializer(serializers.ModelSerializer):
 class RestrictionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Restriction
-        fields = ["id", "restriction", "description", "is_deleted", "is_confirmed", "created_at", "updated_at"]
-        read_only_fields = ["id", "created_at", "updated_at"]
+        fields = ["id", "restriction", "description"]
+        read_only_fields = ["id"]
 
 
 class InstructionSerializer(serializers.ModelSerializer):
@@ -549,12 +599,24 @@ class CatalogListSerializer(serializers.Serializer):
     type_name = serializers.CharField(allow_null=True)
     item_group = serializers.IntegerField(allow_null=True)
     group_name = serializers.CharField(allow_null=True)
-    base_net_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    net_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    gross_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    iva_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    aditional_tax_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
-    retention_amount = serializers.DecimalField(max_digits=12, decimal_places=2, allow_null=True)
+    base_net_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    net_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    gross_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    iva_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    aditional_tax_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
+    retention_amount = serializers.DecimalField(
+        max_digits=12, decimal_places=2, allow_null=True
+    )
     price_configuration = serializers.CharField(allow_null=True)
     min_quantity_purchase = serializers.IntegerField(allow_null=True)
     rations_quantity = serializers.IntegerField(allow_null=True)
@@ -726,4 +788,10 @@ class InstructionTypeSerializer(serializers.ModelSerializer):
             "confirmed_at",
             "deleted_at",
         ]
-        read_only_fields = ["id", "created_at", "updated_at", "confirmed_at", "deleted_at"]
+        read_only_fields = [
+            "id",
+            "created_at",
+            "updated_at",
+            "confirmed_at",
+            "deleted_at",
+        ]

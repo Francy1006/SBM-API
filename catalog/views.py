@@ -759,12 +759,11 @@ class ItemTypeViewSet(viewsets.ModelViewSet):
 
 
 class RestrictionViewSet(viewsets.ModelViewSet):
-    queryset = Restriction.objects.all()  # type: ignore
+    queryset = Restriction.objects.all()
     serializer_class = RestrictionSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ["is_deleted", "is_confirmed"]
     search_fields = ["restriction", "description"]
-    ordering_fields = ["id", "restriction", "created_at"]
+    ordering_fields = ["id", "restriction"]
     ordering = ["restriction"]
 
 
