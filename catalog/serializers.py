@@ -584,48 +584,50 @@ class InstructionSerializer(serializers.ModelSerializer):
 
 
 class CatalogListSerializer(serializers.Serializer):
-    # FIX: NO incluir "code" (en la lista inicial NO estaba)
     sku = serializers.CharField()
-    cover_image = serializers.CharField(allow_null=True)
-    menu = serializers.IntegerField(allow_null=True)
-    menu_name = serializers.CharField(allow_null=True)
-    category = serializers.IntegerField(allow_null=True)
-    category_name = serializers.CharField(allow_null=True)
+    cover_image = serializers.CharField(allow_null=True, required=False)
+    menu = serializers.IntegerField(allow_null=True, required=False)
+    menu_name = serializers.CharField(allow_null=True, required=False)
+    category = serializers.IntegerField(allow_null=True, required=False)
+    category_name = serializers.CharField(allow_null=True, required=False)
     name = serializers.CharField()
-    description = serializers.CharField(allow_null=True)
-    obs = serializers.CharField(allow_null=True)
+    description = serializers.CharField(allow_null=True, required=False)
+    obs = serializers.CharField(allow_null=True, required=False)
     chef_recommendation = serializers.BooleanField()
-    item_type = serializers.IntegerField(allow_null=True)
-    type_name = serializers.CharField(allow_null=True)
-    item_group = serializers.IntegerField(allow_null=True)
-    group_name = serializers.CharField(allow_null=True)
+    item_type = serializers.IntegerField(allow_null=True, required=False)
+    type_name = serializers.CharField(allow_null=True, required=False)
+    item_group = serializers.IntegerField(allow_null=True, required=False)
+    group_name = serializers.CharField(allow_null=True, required=False)
+
     base_net_amount = serializers.DecimalField(
-        max_digits=12, decimal_places=2, allow_null=True
+        max_digits=12, decimal_places=2, allow_null=True, required=False
     )
     net_amount = serializers.DecimalField(
-        max_digits=12, decimal_places=2, allow_null=True
+        max_digits=12, decimal_places=2, allow_null=True, required=False
     )
     gross_amount = serializers.DecimalField(
-        max_digits=12, decimal_places=2, allow_null=True
+        max_digits=12, decimal_places=2, allow_null=True, required=False
     )
     iva_amount = serializers.DecimalField(
-        max_digits=12, decimal_places=2, allow_null=True
+        max_digits=12, decimal_places=2, allow_null=True, required=False
     )
     aditional_tax_amount = serializers.DecimalField(
-        max_digits=12, decimal_places=2, allow_null=True
+        max_digits=12, decimal_places=2, allow_null=True, required=False
     )
     retention_amount = serializers.DecimalField(
-        max_digits=12, decimal_places=2, allow_null=True
+        max_digits=12, decimal_places=2, allow_null=True, required=False
     )
-    price_configuration = serializers.CharField(allow_null=True)
-    min_quantity_purchase = serializers.IntegerField(allow_null=True)
-    rations_quantity = serializers.IntegerField(allow_null=True)
-    item_configuration = serializers.CharField(allow_null=True)
-    configuration = serializers.CharField(allow_null=True)
-    is_visible = serializers.BooleanField()
-    is_confirmed = serializers.BooleanField(allow_null=True)
-    created_at = serializers.DateTimeField()
 
+    price_configuration = serializers.CharField(allow_null=True, required=False)
+    min_quantity_purchase = serializers.IntegerField(allow_null=True, required=False)
+    rations_quantity = serializers.IntegerField(allow_null=True, required=False)
+
+    item_configuration = serializers.CharField(allow_null=True, required=False)
+    configuration = serializers.CharField(allow_null=True, required=False)
+
+    is_visible = serializers.BooleanField()
+    is_confirmed = serializers.BooleanField(allow_null=True, required=False)
+    created_at = serializers.DateTimeField()
 
 class ItemConfigurationSerializer(serializers.ModelSerializer):
     field_verbose_names = serializers.SerializerMethodField()

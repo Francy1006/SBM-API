@@ -5,6 +5,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+import uuid
 
 from .models import (
     Catalog,
@@ -47,7 +48,33 @@ from .serializers import (
 )
 
 
+import uuid
+from django.db import transaction
+from rest_framework import status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+
+from inventory.models import Package
+from price.models import Price
+
+from .models import (
+    Catalog,
+    Menu,
+    ItemGroup,
+    ItemCategory,
+    ItemType,
+    ItemConfiguration,
+)
+from .serializers import CatalogSerializer
+
+
 class CatalogViewSet(viewsets.ModelViewSet):
+    """
+    Objetivo: en POST /catalogs/ crear ItemConfiguration automáticamente (si no viene) y usar su code como FK en Catalog, en una transacción.
+    Requisito: el front debe enviar package (int) cuando NO envía configuration (uuid).
+    """
     queryset = Catalog.objects.all()  # type: ignore
     serializer_class = CatalogSerializer
     lookup_field = "sku"
@@ -102,7 +129,6 @@ class CatalogViewSet(viewsets.ModelViewSet):
             "price",
         )
 
-    # Alias para ordenar desde Vue por nombres visibles
     def _apply_ordering_aliases(self, request, qs):
         ordering = request.query_params.get("ordering")
         if not ordering:
@@ -127,6 +153,55 @@ class CatalogViewSet(viewsets.ModelViewSet):
 
         return qs.order_by(*translated)
 
+    def create(self, request, *args, **kwargs):
+        data = request.data.copy()
+
+        raw_user_code = getattr(getattr(request, "user", None), "code", None)
+        created_by = (str(raw_user_code).strip() if raw_user_code is not None else "")
+        if not created_by:
+            return Response({"detail": "Usuario inválido para created_by."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # evita que el cliente mande estos campos
+        for k in ("created_by", "updated_by", "deleted_by", "confirmed_by"):
+            data.pop(k, None)
+
+        # setea created_by SOLO una vez (en data) para que no choque con serializer.save(created_by=...)
+        data["created_by"] = created_by
+
+        with transaction.atomic():
+            if not data.get("configuration"):
+                sku = data.get("sku")
+                if not sku:
+                    return Response({"detail": "sku es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+
+                package_id = data.get("package")
+                if package_id in ("", None):
+                    return Response({"detail": "package es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+
+                try:
+                    package_id = int(package_id)
+                except Exception:
+                    return Response({"detail": "package debe ser int."}, status=status.HTTP_400_BAD_REQUEST)
+
+                cfg_code = str(uuid.uuid4())
+
+                ItemConfiguration.objects.create(
+                    code=cfg_code,
+                    configuration=str(sku)[:50],
+                    description=(data.get("description") or "Auto"),
+                    package_id=package_id,
+                    created_by=created_by,  # aquí solo una vez
+                )
+
+                data["configuration"] = cfg_code
+
+            serializer = self.get_serializer(data=data)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()  # 👈 NO pasar created_by acá
+
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
     @action(detail=False, methods=["post"], url_path="soft_delete")
     def soft_delete(self, request):
         ids = request.data.get("ids", [])
@@ -138,7 +213,7 @@ class CatalogViewSet(viewsets.ModelViewSet):
 
         updated = Catalog.objects.filter(sku__in=ids).update(
             is_deleted=True, is_visible=False
-        )  # code=sku en la lista
+        )
         return Response({"deleted": updated}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["get"], url_path="list")
@@ -151,7 +226,6 @@ class CatalogViewSet(viewsets.ModelViewSet):
             if page_qs is None:
                 page_qs = qs
 
-            # Diccionarios rápidos
             menu_dict = dict(Menu.objects.values_list("id", "menu"))
             category_dict = dict(ItemCategory.objects.values_list("id", "category"))
             group_dict = dict(ItemGroup.objects.values_list("id", "group_name"))
@@ -160,7 +234,6 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 ItemConfiguration.objects.values_list("code", "configuration")
             )
 
-            # Evitar N+1
             price_codes = [c.price_id for c in page_qs if c.price_id]
             price_map = {
                 p.code: p
@@ -173,7 +246,6 @@ class CatalogViewSet(viewsets.ModelViewSet):
 
                 results.append(
                     {
-                        "code": catalog.sku,
                         "sku": catalog.sku,
                         "cover_image": catalog.cover_image,
                         "menu": catalog.menu_id,
@@ -192,15 +264,9 @@ class CatalogViewSet(viewsets.ModelViewSet):
                         "net_amount": getattr(price_obj, "net_amount", None),
                         "gross_amount": getattr(price_obj, "gross_amount", None),
                         "iva_amount": getattr(price_obj, "iva_amount", None),
-                        "aditional_tax_amount": getattr(
-                            price_obj, "aditional_tax_amount", None
-                        ),
-                        "retention_amount": getattr(
-                            price_obj, "retention_amount", None
-                        ),
-                        "price_configuration": getattr(
-                            price_obj, "price_configuration", None
-                        ),
+                        "aditional_tax_amount": getattr(price_obj, "aditional_tax_amount", None),
+                        "retention_amount": getattr(price_obj, "retention_amount", None),
+                        "price_configuration": getattr(price_obj, "price_configuration", None),
                         "min_quantity_purchase": catalog.min_quantity_purchase,
                         "rations_quantity": catalog.rations_quantity,
                         "item_configuration": catalog.configuration_id,
@@ -239,18 +305,9 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 {"error": f"Error obteniendo lista de catálogos: {str(e)}"},
                 status=500,
             )
-        # REF: CATALOG_ADV_ENDPOINT_001
 
-    @action(
-        detail=False,
-        methods=["get"],
-        url_path=r"adv/(?P<sku>[^/.]+)",
-    )
+    @action(detail=False, methods=["get"], url_path=r"adv/(?P<sku>[^/.]+)")
     def adv(self, request, sku=None):
-        """
-        GET /api/catalogs/adv/{sku}
-        Devuelve campos adicionales (nombres y metadata) resolviendo llaves foráneas.
-        """
         try:
             catalog = self.get_queryset().filter(sku=sku).first()
             if not catalog:
@@ -259,69 +316,45 @@ class CatalogViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND,
                 )
 
-            # PRICE (ya viene en select_related('price'))
             price_obj = getattr(catalog, "price", None)
-
-            # INSTRUCTIONS (ya viene select_related('usage_instructions'))
             instr = getattr(catalog, "usage_instructions", None)
             instr_type = getattr(instr, "type", None) if instr else None
-
-            # RESTRICTION (ya viene select_related('restriction'))
             restriction = getattr(catalog, "restriction", None)
 
-            # CONFIGURATION (ya viene select_related('configuration'))
             cfg = getattr(catalog, "configuration", None)
             pkg = getattr(cfg, "package", None) if cfg else None
             pkg_type = getattr(pkg, "package_type", None) if pkg else None
             transport_type = getattr(pkg, "transport_type", None) if pkg else None
             measure_unit = getattr(pkg, "measure_unit", None) if pkg else None
             storage_instr = getattr(pkg, "storage_instructions", None) if pkg else None
-            transport_instr = (
-                getattr(pkg, "transport_instructions", None) if pkg else None
-            )
+            transport_instr = getattr(pkg, "transport_instructions", None) if pkg else None
 
             advanced = {
-                # Catálogo: campos extra útiles
                 "code_uuid": getattr(catalog, "code", None),
                 "obs": getattr(catalog, "obs", None),
                 "secondary_image": getattr(catalog, "secondary_image", None),
                 "complementary_image": getattr(catalog, "complementary_image", None),
                 "image_gallery": getattr(catalog, "image_gallery", None),
-                # Menú / Grupo / Categoría / Tipo (labels extra, aunque ya tengas *_name en list)
-                "menu_description": getattr(
-                    getattr(catalog, "menu", None), "description", None
-                ),
-                "group_description": getattr(
-                    getattr(catalog, "item_group", None), "description", None
-                ),
-                "category_description": getattr(
-                    getattr(catalog, "category", None), "description", None
-                ),
-                "type_description": getattr(
-                    getattr(catalog, "type", None), "description", None
-                ),
-                # Restricción
+                "menu_description": getattr(getattr(catalog, "menu", None), "description", None),
+                "group_description": getattr(getattr(catalog, "item_group", None), "description", None),
+                "category_description": getattr(getattr(catalog, "category", None), "description", None),
+                "type_description": getattr(getattr(catalog, "type", None), "description", None),
                 "restriction_name": getattr(restriction, "restriction", None),
                 "restriction_description": getattr(restriction, "description", None),
-                # Instrucciones de uso
                 "usage_instruction": getattr(instr, "instruction", None),
                 "usage_instruction_description": getattr(instr, "description", None),
                 "usage_instruction_url": getattr(instr, "url_documentation", None),
                 "usage_instruction_type_id": getattr(instr, "type_id", None),
                 "usage_instruction_type_name": getattr(instr_type, "type", None),
-                # Precio
                 "price_code": getattr(price_obj, "code", None),
                 "price_configuration": getattr(price_obj, "price_configuration", None),
                 "base_net_amount": getattr(price_obj, "base_net_amount", None),
                 "net_amount": getattr(price_obj, "net_amount", None),
                 "gross_amount": getattr(price_obj, "gross_amount", None),
                 "iva_amount": getattr(price_obj, "iva_amount", None),
-                "aditional_tax_amount": getattr(
-                    price_obj, "aditional_tax_amount", None
-                ),
+                "aditional_tax_amount": getattr(price_obj, "aditional_tax_amount", None),
                 "retention_amount": getattr(price_obj, "retention_amount", None),
                 "price_is_current": getattr(price_obj, "is_current", None),
-                # Configuración / Package (para tu sección “Configuración” después)
                 "configuration_code": getattr(cfg, "code", None),
                 "configuration_name": getattr(cfg, "configuration", None),
                 "configuration_description": getattr(cfg, "description", None),
@@ -337,16 +370,11 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 "measure_unit_name": getattr(measure_unit, "measure_unit", None),
                 "quantity_unit": getattr(pkg, "quantity_unit", None),
                 "storage_instruction": getattr(storage_instr, "instruction", None),
-                "storage_instruction_url": getattr(
-                    storage_instr, "url_documentation", None
-                ),
+                "storage_instruction_url": getattr(storage_instr, "url_documentation", None),
                 "transport_instruction": getattr(transport_instr, "instruction", None),
-                "transport_instruction_url": getattr(
-                    transport_instr, "url_documentation", None
-                ),
+                "transport_instruction_url": getattr(transport_instr, "url_documentation", None),
             }
 
-            # Limpia None para que el front no se llene de “-” innecesario si quieres
             advanced = {k: v for k, v in advanced.items() if v is not None}
 
             verbose_names = {
