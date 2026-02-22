@@ -5,6 +5,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from django.db import models
+from catalog.models import ItemConfigurationDetail
+from django.utils import timezone
+
 import uuid
 
 from .models import (
@@ -21,6 +25,10 @@ from .models import (
     InstructionType,
     ItemConfiguration,
 )
+
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework import status
 
 from inventory.models import Package, PackageType, TransportType, MeasureUnit
 from price.models import Price
@@ -72,9 +80,13 @@ from .serializers import CatalogSerializer
 
 class CatalogViewSet(viewsets.ModelViewSet):
     """
-    Objetivo: en POST /catalogs/ crear ItemConfiguration automáticamente (si no viene) y usar su code como FK en Catalog, en una transacción.
-    Requisito: el front debe enviar package (int) cuando NO envía configuration (uuid).
+    - POST /catalogs/: crea ItemConfiguration automático si no viene y guarda su code en Catalog.configuration
+    - GET  /catalogs/list/: listado optimizado
+    - GET  /catalogs/adv/{sku}/: sección avanzado
+    - GET  /catalogs/{sku}/config/: payload para sección "Configuración"
+    - POST /catalogs/{sku}/config/: guarda vínculos (usa ditaly_pasta.item_configuration_detail)
     """
+
     queryset = Catalog.objects.all()  # type: ignore
     serializer_class = CatalogSerializer
     lookup_field = "sku"
@@ -157,31 +169,41 @@ class CatalogViewSet(viewsets.ModelViewSet):
         data = request.data.copy()
 
         raw_user_code = getattr(getattr(request, "user", None), "code", None)
-        created_by = (str(raw_user_code).strip() if raw_user_code is not None else "")
+        created_by = str(raw_user_code).strip() if raw_user_code is not None else ""
         if not created_by:
-            return Response({"detail": "Usuario inválido para created_by."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "Usuario inválido para created_by."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # evita que el cliente mande estos campos
         for k in ("created_by", "updated_by", "deleted_by", "confirmed_by"):
             data.pop(k, None)
 
-        # setea created_by SOLO una vez (en data) para que no choque con serializer.save(created_by=...)
         data["created_by"] = created_by
 
         with transaction.atomic():
             if not data.get("configuration"):
                 sku = data.get("sku")
                 if not sku:
-                    return Response({"detail": "sku es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {"detail": "sku es requerido."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
                 package_id = data.get("package")
                 if package_id in ("", None):
-                    return Response({"detail": "package es requerido."}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {"detail": "package es requerido."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
                 try:
                     package_id = int(package_id)
                 except Exception:
-                    return Response({"detail": "package debe ser int."}, status=status.HTTP_400_BAD_REQUEST)
+                    return Response(
+                        {"detail": "package debe ser int."},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
                 cfg_code = str(uuid.uuid4())
 
@@ -190,14 +212,14 @@ class CatalogViewSet(viewsets.ModelViewSet):
                     configuration=str(sku)[:50],
                     description=(data.get("description") or "Auto"),
                     package_id=package_id,
-                    created_by=created_by,  # aquí solo una vez
+                    created_by=created_by,
                 )
 
                 data["configuration"] = cfg_code
 
             serializer = self.get_serializer(data=data)
             serializer.is_valid(raise_exception=True)
-            serializer.save()  # 👈 NO pasar created_by acá
+            serializer.save()
 
         headers = self.get_success_headers(serializer.data)
         return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -264,9 +286,13 @@ class CatalogViewSet(viewsets.ModelViewSet):
                         "net_amount": getattr(price_obj, "net_amount", None),
                         "gross_amount": getattr(price_obj, "gross_amount", None),
                         "iva_amount": getattr(price_obj, "iva_amount", None),
-                        "aditional_tax_amount": getattr(price_obj, "aditional_tax_amount", None),
+                        "aditional_tax_amount": getattr(
+                            price_obj, "aditional_tax_amount", None
+                        ),
                         "retention_amount": getattr(price_obj, "retention_amount", None),
-                        "price_configuration": getattr(price_obj, "price_configuration", None),
+                        "price_configuration": getattr(
+                            price_obj, "price_configuration", None
+                        ),
                         "min_quantity_purchase": catalog.min_quantity_purchase,
                         "rations_quantity": catalog.rations_quantity,
                         "item_configuration": catalog.configuration_id,
@@ -431,6 +457,281 @@ class CatalogViewSet(viewsets.ModelViewSet):
         except Exception as e:
             return Response(
                 {"detail": f"Error obteniendo avanzado: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def _safe_float(self, v, default=0.0):
+        try:
+            if v is None or v == "":
+                return default
+            return float(v)
+        except Exception:
+            return default
+
+    def _sum_rows(self, rows):
+        count = 0
+        sub_net = 0.0
+        sub_gross = 0.0
+        sub_iva = 0.0
+
+        for r in rows:
+            q = self._safe_float(r.get("quantity"), 1.0)
+            n = self._safe_float(r.get("net_amount"), 0.0)
+            g = self._safe_float(r.get("gross_amount"), 0.0)
+            i = self._safe_float(r.get("iva_amount"), 0.0)
+
+            count += 1
+            sub_net += (n * q)
+            sub_gross += (g * q)
+            sub_iva += (i * q)
+
+        return {
+            "count": count,
+            "sub_total_net": sub_net,
+            "sub_total_gross": sub_gross,
+            "sub_total_iva": sub_iva,
+        }
+
+    def _serialize_detail_row(self, d, obj=None, item_kind=None):
+        return {
+            "detail_code": getattr(d, "code", None),
+            "detail": getattr(d, "detail", None),
+            "type_id": getattr(d, "type_id", None),
+            "item_kind": item_kind,
+            "item_code": getattr(d, "id_item", None),
+            "item_sku": getattr(obj, "sku", None),
+            "description": getattr(obj, "description", None),
+            "obs": getattr(obj, "obs", None),
+            "quantity": getattr(d, "quantity", None) if hasattr(d, "quantity") else 1,
+            "net_amount": getattr(d, "net_amount", None) if hasattr(d, "net_amount") else None,
+            "gross_amount": getattr(d, "gross_amount", None) if hasattr(d, "gross_amount") else None,
+            "iva_amount": getattr(d, "iva_amount", None) if hasattr(d, "iva_amount") else None,
+        }
+
+    @action(detail=True, methods=["get", "post"], url_path="config")
+    def config(self, request, sku=None):
+        catalog = self.get_queryset().filter(sku=sku).first()
+        if not catalog:
+            return Response({"detail": "Catálogo no encontrado."}, status=status.HTTP_404_NOT_FOUND)
+
+        price_obj = getattr(catalog, "price", None)
+        cfg = getattr(catalog, "configuration", None)
+
+        if request.method == "POST":
+            raw_user_code = getattr(getattr(request, "user", None), "code", None)
+            created_by = str(raw_user_code).strip() if raw_user_code is not None else ""
+            if not created_by:
+                return Response({"detail": "Usuario inválido para created_by."}, status=status.HTTP_400_BAD_REQUEST)
+
+            data = request.data or {}
+
+            products_in = data.get("products", None)
+            materials_in = data.get("materials", None)
+            services_in = data.get("services", None)
+            links_in = data.get("links", None)
+
+            links_payload = []
+
+            def add_rows(kind, rows):
+                if not isinstance(rows, list):
+                    return
+                for r in rows:
+                    if not isinstance(r, dict):
+                        continue
+                    links_payload.append(
+                        {
+                            "item_kind": kind,
+                            "item_sku": (r.get("item_sku") or r.get("sku") or "").strip(),
+                            "item_code": (r.get("item_code") or r.get("id_item") or "").strip(),
+                            "detail": (r.get("detail") or "").strip()
+                            or f"{kind}-{(r.get('item_sku') or r.get('sku') or '')}".strip()[:50],
+                        }
+                    )
+
+            if isinstance(links_in, list):
+                for r in links_in:
+                    if not isinstance(r, dict):
+                        continue
+                    kind = (r.get("item_type") or r.get("item_kind") or "").strip().lower()
+                    if kind not in ("product", "material", "service"):
+                        continue
+                    add_rows(kind, [r])
+            else:
+                add_rows("product", products_in or [])
+                add_rows("material", materials_in or [])
+                add_rows("service", services_in or [])
+
+            if not cfg or not getattr(cfg, "code", None):
+                return Response({"detail": "Catálogo sin ItemConfiguration."}, status=status.HTTP_400_BAD_REQUEST)
+
+            with transaction.atomic():
+                ItemConfigurationDetail.objects.filter(configuration_id=cfg.code).delete()
+
+                now = timezone.now()
+
+                sku_products = [x["item_sku"] for x in links_payload if x["item_kind"] == "product" and x["item_sku"]]
+                sku_materials = [x["item_sku"] for x in links_payload if x["item_kind"] == "material" and x["item_sku"]]
+                sku_services = [x["item_sku"] for x in links_payload if x["item_kind"] == "service" and x["item_sku"]]
+
+                prod_by_sku = {p.sku: p for p in Product.objects.filter(sku__in=sku_products)}
+                mat_by_sku = {m.sku: m for m in Material.objects.filter(sku__in=sku_materials)}
+                srv_by_sku = {s.sku: s for s in Service.objects.filter(sku__in=sku_services)}
+
+                bulk = []
+                for r in links_payload:
+                    kind = r["item_kind"]
+                    item_code = r.get("item_code") or ""
+                    item_sku = r.get("item_sku") or ""
+
+                    obj = None
+                    if not item_code:
+                        if kind == "product":
+                            obj = prod_by_sku.get(item_sku)
+                        elif kind == "material":
+                            obj = mat_by_sku.get(item_sku)
+                        elif kind == "service":
+                            obj = srv_by_sku.get(item_sku)
+                        if not obj:
+                            continue
+                        item_code = getattr(obj, "code", None)
+
+                    if not item_code:
+                        continue
+
+                    if obj is None:
+                        if kind == "product":
+                            obj = Product.objects.filter(code=item_code).first()
+                        elif kind == "material":
+                            obj = Material.objects.filter(code=item_code).first()
+                        elif kind == "service":
+                            obj = Service.objects.filter(code=item_code).first()
+
+                    type_id = getattr(obj, "type", None) if obj else None
+                    if not type_id:
+                        continue
+
+                    bulk.append(
+                        ItemConfigurationDetail(
+                            code=str(uuid.uuid4()),
+                            detail=(r.get("detail") or "")[:50] or f"{kind}-{item_sku}"[:50],
+                            type_id=int(type_id),
+                            configuration_id=cfg.code,
+                            id_item=item_code,
+                            created_at=now,
+                            created_by=created_by,
+                        )
+                    )
+
+                if bulk:
+                    ItemConfigurationDetail.objects.bulk_create(bulk)
+
+            return Response({"detail": "Configuración guardada."}, status=status.HTTP_200_OK)
+
+        try:
+            informativa_data = {
+                "item_configuration_code": getattr(cfg, "code", None),
+                "item_configuration_name": getattr(cfg, "configuration", None),
+                "price_code": getattr(price_obj, "code", None),
+                "price_configuration": getattr(price_obj, "price_configuration", None),
+                "base_net_amount": getattr(price_obj, "base_net_amount", None),
+                "price_is_current": getattr(price_obj, "is_current", None),
+            }
+
+            informativa_verbose = {
+                "item_configuration_code": "Item Configuration (code)",
+                "item_configuration_name": "Item Configuration (configuration)",
+                "price_code": "Price (code)",
+                "price_configuration": "Price Configuration (code)",
+                "base_net_amount": "Valor Neto Base",
+                "price_is_current": "Precio Vigente",
+            }
+
+            calculation_props = {
+                "code": getattr(price_obj, "price_configuration", None),
+                "baseNetAmount": getattr(price_obj, "base_net_amount", None),
+                "netAmount": getattr(price_obj, "net_amount", None),
+                "grossAmount": getattr(price_obj, "gross_amount", None),
+                "ivaAmount": getattr(price_obj, "iva_amount", None),
+                "additionalTaxAmount": getattr(price_obj, "aditional_tax_amount", None),
+                "retentionAmount": getattr(price_obj, "retention_amount", None),
+                "selectedProductSku": catalog.sku,
+            }
+
+            products_rows = []
+            materials_rows = []
+            services_rows = []
+
+            if cfg and getattr(cfg, "code", None):
+                details = list(
+                    ItemConfigurationDetail.objects.filter(configuration_id=cfg.code).order_by("created_at")
+                )
+
+                id_items = [d.id_item for d in details if getattr(d, "id_item", None)]
+                prod_map = {p.code: p for p in Product.objects.filter(code__in=id_items)}
+                mat_map = {m.code: m for m in Material.objects.filter(code__in=id_items)}
+                srv_map = {s.code: s for s in Service.objects.filter(code__in=id_items)}
+
+                for d in details:
+                    item_code = getattr(d, "id_item", None)
+                    if not item_code:
+                        continue
+
+                    if item_code in prod_map:
+                        products_rows.append(self._serialize_detail_row(d, prod_map[item_code], "product"))
+                    elif item_code in mat_map:
+                        materials_rows.append(self._serialize_detail_row(d, mat_map[item_code], "material"))
+                    elif item_code in srv_map:
+                        services_rows.append(self._serialize_detail_row(d, srv_map[item_code], "service"))
+                    else:
+                        continue
+
+            subtotals_products = self._sum_rows(products_rows)
+            subtotals_materials = self._sum_rows(materials_rows)
+            subtotals_services = self._sum_rows(services_rows)
+
+            totals = {
+                "count": subtotals_products["count"] + subtotals_materials["count"] + subtotals_services["count"],
+                "sub_total_net": subtotals_products["sub_total_net"] + subtotals_materials["sub_total_net"] + subtotals_services["sub_total_net"],
+                "sub_total_gross": subtotals_products["sub_total_gross"] + subtotals_materials["sub_total_gross"] + subtotals_services["sub_total_gross"],
+                "sub_total_iva": subtotals_products["sub_total_iva"] + subtotals_materials["sub_total_iva"] + subtotals_services["sub_total_iva"],
+            }
+
+            linking = {
+                "header": {
+                    "item_configuration_code": getattr(cfg, "code", None),
+                    "item_configuration_name": getattr(cfg, "configuration", None),
+                    "base_net_amount": getattr(price_obj, "base_net_amount", None),
+                },
+                "totals": totals,
+                "products": {
+                    "links": products_rows,
+                    "subtotals": subtotals_products,
+                    "searchBaseUrl": "/products/?search=",
+                },
+                "materials": {
+                    "links": materials_rows,
+                    "subtotals": subtotals_materials,
+                    "searchBaseUrl": "/materials/?search=",
+                },
+                "services": {
+                    "links": services_rows,
+                    "subtotals": subtotals_services,
+                    "searchBaseUrl": "/services/?search=",
+                },
+            }
+
+            return Response(
+                {
+                    "informativa": {"data": informativa_data, "verbose_names": informativa_verbose},
+                    "calculation": {"props": calculation_props},
+                    "linking": linking,
+                },
+                status=status.HTTP_200_OK,
+            )
+
+        except Exception as e:
+            return Response(
+                {"detail": f"Error obteniendo configuración: {str(e)}"},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
@@ -677,6 +978,45 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    @action(detail=False, methods=["get"], url_path="lookup")
+    def lookup(self, request):
+        """
+        Autocomplete liviano:
+        GET /products/lookup/?q=pollo&limit=10
+        Retorna [{sku, description, obs}]
+        """
+        q = (request.query_params.get("q") or "").strip()
+        limit = request.query_params.get("limit") or "10"
+
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 10
+
+        limit = max(1, min(limit, 50))
+
+        if not q:
+            return Response({"results": []}, status=status.HTTP_200_OK)
+
+        qs = Product.objects.all()
+
+        # búsqueda simple y rápida
+        qs = qs.filter(
+            models.Q(sku__icontains=q) |
+            models.Q(description__icontains=q) |
+            models.Q(obs__icontains=q)
+        ).order_by("description")[:limit]
+
+        results = [
+            {
+                "sku": p.sku,
+                "description": p.description,
+                "obs": p.obs,
+            }
+            for p in qs
+        ]
+
+        return Response({"results": results}, status=status.HTTP_200_OK)
 
 
 class MaterialViewSet(viewsets.ModelViewSet):
@@ -858,6 +1198,60 @@ class ItemConfigurationViewSet(viewsets.ModelViewSet):
             queryset = self.get_queryset().filter(is_deleted=False)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+    @action(detail=False, methods=["get"], url_path="lookup")
+    def lookup(self, request):
+        """
+        GET /materials/lookup/?q=pollo&limit=10
+        Retorna [{sku, description, obs}]
+        """
+        q = (request.query_params.get("q") or "").strip()
+        limit = request.query_params.get("limit") or "10"
+
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 10
+
+        limit = max(1, min(limit, 50))
+
+        if not q:
+            return Response({"results": []}, status=status.HTTP_200_OK)
+
+        qs = Material.objects.all().filter(
+            models.Q(sku__icontains=q) |
+            models.Q(description__icontains=q) |
+            models.Q(obs__icontains=q)
+        ).order_by("description")[:limit]
+
+        results = [{"sku": m.sku, "description": m.description, "obs": m.obs} for m in qs]
+        return Response({"results": results}, status=status.HTTP_200_OK)
+    @action(detail=False, methods=["get"], url_path="lookup")
+    def lookup(self, request):
+        """
+        GET /services/lookup/?q=pollo&limit=10
+        Retorna [{sku, description, obs}]
+        """
+        q = (request.query_params.get("q") or "").strip()
+        limit = request.query_params.get("limit") or "10"
+
+        try:
+            limit = int(limit)
+        except Exception:
+            limit = 10
+
+        limit = max(1, min(limit, 50))
+
+        if not q:
+            return Response({"results": []}, status=status.HTTP_200_OK)
+
+        qs = Service.objects.all().filter(
+            models.Q(sku__icontains=q) |
+            models.Q(description__icontains=q) |
+            models.Q(obs__icontains=q)
+        ).order_by("description")[:limit]
+
+        results = [{"sku": s.sku, "description": s.description, "obs": s.obs} for s in qs]
+        return Response({"results": results}, status=status.HTTP_200_OK)
 
 
 class PackageViewSet(viewsets.ModelViewSet):

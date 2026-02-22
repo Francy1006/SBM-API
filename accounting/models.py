@@ -37,24 +37,15 @@ class PriceFiscalConfiguration(models.Model):
 
 
 class FiscalConfigurationDetail(models.Model):
-    """
-    Modelo para detalles de configuración fiscal
-    """
+
     id = models.AutoField(primary_key=True)
-    price_fiscal_configuration = models.CharField(max_length=36, verbose_name="Configuración Fiscal")
-    price = models.CharField(max_length=36, verbose_name="Precio")
-    fiscal_directive = models.CharField(max_length=36, verbose_name="Directiva Fiscal")
-    log = models.TextField(default="init;", verbose_name="Log")
+    price_configuration = models.CharField(max_length=36)
+    fiscal_directive = models.CharField(max_length=36)
+    var = models.CharField(max_length=50)
 
     class Meta:
-        db_table = 'fiscal_configuration_detail'
-        verbose_name = "Detalle de Configuración Fiscal"
-        verbose_name_plural = "Detalles de Configuración Fiscal"
-        ordering = ['id']
-        unique_together = ['id', 'price', 'fiscal_directive']
-
-    def __str__(self):
-        return f"Detalle {self.id}"
+        db_table = '"ditaly_pasta"."fiscal_configuration_detail"'
+        managed = False
 
 
 class FiscalDirectiveType(models.Model):

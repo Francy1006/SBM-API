@@ -3,24 +3,68 @@ import uuid
 from inventory.models import Package
 
 
+
 # =========================
 # CATALOG
 # =========================
+
 
 class Catalog(models.Model):
     id = models.AutoField(primary_key=True)
     code = models.CharField(max_length=36, unique=True)
     sku = models.CharField(max_length=50)
 
-    menu = models.ForeignKey('Menu', db_column='menu', on_delete=models.CASCADE, related_name='catalogs')
-    item_group = models.ForeignKey('ItemGroup', db_column='item_group', on_delete=models.CASCADE, related_name='catalogs')
-    category = models.ForeignKey('ItemCategory', db_column='category', on_delete=models.CASCADE, related_name='catalogs')
-    type = models.ForeignKey('ItemType', db_column='type', on_delete=models.CASCADE, related_name='catalogs')
-    restriction = models.ForeignKey('Restriction', db_column='restriction', on_delete=models.CASCADE, related_name='catalogs', null=True, blank=True)
-    usage_instructions = models.ForeignKey('Instruction', db_column='usage_instructions', on_delete=models.CASCADE, related_name='catalogs', null=True, blank=True)
-    configuration = models.ForeignKey('ItemConfiguration', db_column='configuration', to_field='code', on_delete=models.CASCADE, related_name='catalogs', null=True, blank=True)
+    menu = models.ForeignKey(
+        "Menu", db_column="menu", on_delete=models.CASCADE, related_name="catalogs"
+    )
+    item_group = models.ForeignKey(
+        "ItemGroup",
+        db_column="item_group",
+        on_delete=models.CASCADE,
+        related_name="catalogs",
+    )
+    category = models.ForeignKey(
+        "ItemCategory",
+        db_column="category",
+        on_delete=models.CASCADE,
+        related_name="catalogs",
+    )
+    type = models.ForeignKey(
+        "ItemType", db_column="type", on_delete=models.CASCADE, related_name="catalogs"
+    )
+    restriction = models.ForeignKey(
+        "Restriction",
+        db_column="restriction",
+        on_delete=models.CASCADE,
+        related_name="catalogs",
+        null=True,
+        blank=True,
+    )
+    usage_instructions = models.ForeignKey(
+        "Instruction",
+        db_column="usage_instructions",
+        on_delete=models.CASCADE,
+        related_name="catalogs",
+        null=True,
+        blank=True,
+    )
+    configuration = models.ForeignKey(
+        "ItemConfiguration",
+        db_column="configuration",
+        to_field="code",
+        on_delete=models.CASCADE,
+        related_name="catalogs",
+        null=True,
+        blank=True,
+    )
 
-    price = models.ForeignKey('price.Price', db_column='price', to_field='code', on_delete=models.CASCADE, related_name='catalogs')
+    price = models.ForeignKey(
+        "price.Price",
+        db_column="price",
+        to_field="code",
+        on_delete=models.CASCADE,
+        related_name="catalogs",
+    )
 
     name = models.CharField(max_length=50)
     description = models.TextField()
@@ -53,8 +97,8 @@ class Catalog(models.Model):
     version = models.IntegerField(default=1)
 
     class Meta:
-        db_table = 'catalog'
-        ordering = ['-created_at']
+        db_table = "catalog"
+        ordering = ["-created_at"]
 
     def __str__(self):
         return self.name
@@ -69,6 +113,7 @@ class Catalog(models.Model):
 # PRODUCT
 # =========================
 
+
 class Product(models.Model):
     id = models.AutoField(primary_key=True)
     code = models.CharField(max_length=36, unique=True)
@@ -80,7 +125,7 @@ class Product(models.Model):
     price = models.CharField(max_length=36)
     provider = models.IntegerField()
     type = models.IntegerField()
-    item_group = models.IntegerField(db_column='item_group')
+    item_group = models.IntegerField(db_column="item_group")
     category = models.IntegerField()
     url = models.CharField(max_length=255, null=True, blank=True)
     package = models.IntegerField()
@@ -99,8 +144,8 @@ class Product(models.Model):
     version = models.IntegerField(default=1)
 
     class Meta:
-        db_table = 'product'
-        ordering = ['-created_at']
+        db_table = "product"
+        ordering = ["-created_at"]
 
     def __str__(self):
         return self.description
@@ -109,6 +154,7 @@ class Product(models.Model):
 # =========================
 # MATERIAL
 # =========================
+
 
 class Material(models.Model):
     id = models.AutoField(primary_key=True)
@@ -131,7 +177,7 @@ class Material(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        db_table = 'material'
+        db_table = "material"
 
     def __str__(self):
         return self.description
@@ -140,6 +186,7 @@ class Material(models.Model):
 # =========================
 # SERVICE
 # =========================
+
 
 class Service(models.Model):
     id = models.AutoField(primary_key=True)
@@ -158,7 +205,7 @@ class Service(models.Model):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        db_table = 'service'
+        db_table = "service"
 
     def __str__(self):
         return self.description
@@ -168,6 +215,7 @@ class Service(models.Model):
 # REFERENCIA
 # =========================
 
+
 class Menu(models.Model):
     id = models.AutoField(primary_key=True)
     menu = models.CharField(max_length=50)
@@ -175,7 +223,7 @@ class Menu(models.Model):
     franchise_only = models.BooleanField(default=False)
 
     class Meta:
-        db_table = 'menu'
+        db_table = "menu"
 
     def __str__(self):
         return self.menu
@@ -187,7 +235,7 @@ class ItemGroup(models.Model):
     description = models.TextField()
 
     class Meta:
-        db_table = 'item_group'
+        db_table = "item_group"
 
     def __str__(self):
         return self.group_name
@@ -199,7 +247,7 @@ class ItemCategory(models.Model):
     description = models.TextField()
 
     class Meta:
-        db_table = 'item_category'
+        db_table = "item_category"
 
     def __str__(self):
         return self.category
@@ -211,7 +259,7 @@ class ItemType(models.Model):
     description = models.TextField()
 
     class Meta:
-        db_table = 'item_type'
+        db_table = "item_type"
 
     def __str__(self):
         return self.type
@@ -223,7 +271,7 @@ class Restriction(models.Model):
     description = models.TextField()
 
     class Meta:
-        db_table = 'restriction'
+        db_table = "restriction"
 
     def __str__(self):
         return self.restriction
@@ -235,7 +283,7 @@ class Instruction(models.Model):
     description = models.TextField()
 
     class Meta:
-        db_table = 'instruction'
+        db_table = "instruction"
 
     def __str__(self):
         return self.instruction
@@ -247,7 +295,7 @@ class InstructionType(models.Model):
     description = models.TextField()
 
     class Meta:
-        db_table = 'instruction_type'
+        db_table = "instruction_type"
 
     def __str__(self):
         return self.type
@@ -281,3 +329,18 @@ class ItemConfiguration(models.Model):
 
     def __str__(self):
         return self.configuration
+
+
+class ItemConfigurationDetail(models.Model):
+    code = models.CharField(max_length=36)  # en DB no es único global, pero lo usamos como campo normal
+    detail = models.CharField(max_length=50)
+    type = models.ForeignKey('ItemType', db_column='type', on_delete=models.CASCADE)
+    configuration = models.ForeignKey('ItemConfiguration', db_column='configuration', to_field='code', on_delete=models.CASCADE)
+    id_item = models.CharField(max_length=36)  # UUID del Product/Material/Service (campo code en esas tablas)
+    created_at = models.DateTimeField()
+    created_by = models.CharField(max_length=36)
+
+    class Meta:
+        db_table = 'item_configuration_detail'
+        managed = False  # tabla ya existe
+
