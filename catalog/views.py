@@ -771,7 +771,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 
             factory = APIRequestFactory()
             calculation_request = factory.post(
-                "/price/product-price-calculation/",
+                "/product-price-calculation/",
                 {"sku": product.sku},
                 format="json",
             )
