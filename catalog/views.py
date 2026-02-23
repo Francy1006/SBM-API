@@ -1061,33 +1061,48 @@ class ProductViewSet(viewsets.ModelViewSet):
 
 
 class MaterialViewSet(viewsets.ModelViewSet):
-    queryset = Material.objects.all()  # type: ignore
+    queryset = Material.objects.all()
     serializer_class = MaterialSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+
     filterset_fields = [
         "is_active",
-        "is_deleted",
-        "is_confirmed",
         "provider",
         "type",
-        "group",
+        "item_group",
         "category",
     ]
-    search_fields = ["description", "sku", "code", "obs"]
-    ordering_fields = ["id", "description", "created_at", "updated_at"]
+
+    search_fields = [
+        "description",
+        "sku",
+        "code",
+        "obs",
+    ]
+
+    ordering_fields = [
+        "id",
+        "description",
+        "created_at",
+    ]
+
     ordering = ["-id"]
 
     @action(detail=False, methods=["get"])
     def active(self, request):
-        queryset = self.get_queryset().filter(is_active=True, is_deleted=False)
+        queryset = self.get_queryset().filter(is_active=True)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"])
     def by_provider(self, request):
         provider_id = request.query_params.get("provider_id")
+
         if provider_id:
-            queryset = self.get_queryset().filter(provider=provider_id, is_active=True)
+            queryset = self.get_queryset().filter(
+                provider=provider_id,
+                is_active=True
+            )
         else:
             queryset = self.get_queryset().filter(is_active=True)
 
@@ -1096,20 +1111,20 @@ class MaterialViewSet(viewsets.ModelViewSet):
 
 
 class ServiceViewSet(viewsets.ModelViewSet):
-    queryset = Service.objects.all()  # type: ignore
+    queryset = Service.objects.all()
     serializer_class = ServiceSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+
     filterset_fields = [
         "is_active",
-        "is_deleted",
-        "is_confirmed",
         "provider",
         "type",
-        "group_id",
+        "item_group",
         "category",
     ]
+
     search_fields = ["description", "sku", "code", "obs"]
-    ordering_fields = ["id", "description", "created_at", "updated_at"]
+    ordering_fields = ["id", "description"]
     ordering = ["-id"]
 
     @action(detail=False, methods=["get"])

@@ -473,7 +473,7 @@ class MaterialSerializer(serializers.ModelSerializer):
             "price",
             "provider",
             "type",
-            "group",
+            "item_group",
             "category",
             "url",
             "package",
@@ -481,24 +481,8 @@ class MaterialSerializer(serializers.ModelSerializer):
             "is_deleted",
             "is_confirmed",
             "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
-            "created_by",
-            "confirmed_by",
-            "updated_by",
-            "deleted_by",
-            "log",
-            "version",
         ]
-        read_only_fields = [
-            "id",
-            "code",
-            "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
-        ]
+        read_only_fields = ["id", "code", "created_at"]
 
 
 class ServiceSerializer(serializers.ModelSerializer):
@@ -515,30 +499,14 @@ class ServiceSerializer(serializers.ModelSerializer):
             "price",
             "provider",
             "type",
-            "group",
+            "item_group",
             "category",
             "url",
             "is_active",
-            "is_deleted",
-            "is_confirmed",
-            "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
-            "created_by",
-            "confirmed_by",
-            "updated_by",
-            "deleted_by",
-            "log",
-            "version",
         ]
         read_only_fields = [
             "id",
             "code",
-            "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
         ]
 
 
