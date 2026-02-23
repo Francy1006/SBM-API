@@ -565,8 +565,6 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 return Response({"detail": "Catálogo sin ItemConfiguration."}, status=status.HTTP_400_BAD_REQUEST)
 
             with transaction.atomic():
-                ItemConfigurationDetail.objects.filter(configuration_id=cfg.code).delete()
-
                 now = timezone.now()
 
                 sku_products = [x["item_sku"] for x in links_payload if x["item_kind"] == "product" and x["item_sku"]]
@@ -577,11 +575,16 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 mat_by_sku = {m.sku: m for m in Material.objects.filter(sku__in=sku_materials)}
                 srv_by_sku = {s.sku: s for s in Service.objects.filter(sku__in=sku_services)}
 
-                bulk = []
+                existing_qs = ItemConfigurationDetail.objects.filter(configuration_id=cfg.code)
+                existing = list(existing_qs)
+                existing_by_item = {e.id_item: e for e in existing if getattr(e, "id_item", None)}
+
+                desired = []
+
                 for r in links_payload:
                     kind = r["item_kind"]
-                    item_code = r.get("item_code") or ""
-                    item_sku = r.get("item_sku") or ""
+                    item_code = (r.get("item_code") or "").strip()
+                    item_sku = (r.get("item_sku") or "").strip()
 
                     obj = None
                     if not item_code:
@@ -591,8 +594,10 @@ class CatalogViewSet(viewsets.ModelViewSet):
                             obj = mat_by_sku.get(item_sku)
                         elif kind == "service":
                             obj = srv_by_sku.get(item_sku)
+
                         if not obj:
                             continue
+
                         item_code = getattr(obj, "code", None)
 
                     if not item_code:
@@ -610,20 +615,56 @@ class CatalogViewSet(viewsets.ModelViewSet):
                     if not type_id:
                         continue
 
-                    bulk.append(
-                        ItemConfigurationDetail(
-                            code=str(uuid.uuid4()),
-                            detail=(r.get("detail") or "")[:50] or f"{kind}-{item_sku}"[:50],
-                            type_id=int(type_id),
-                            configuration_id=cfg.code,
-                            id_item=item_code,
-                            created_at=now,
-                            created_by=created_by,
-                        )
-                    )
+                    desired.append({
+                        "item_code": item_code,
+                        "detail": (r.get("detail") or "")[:50] or f"{kind}-{item_sku}"[:50],
+                        "type_id": int(type_id),
+                    })
 
-                if bulk:
-                    ItemConfigurationDetail.objects.bulk_create(bulk)
+                desired_codes = {d["item_code"] for d in desired}
+
+                # 🔴 eliminar los que ya no vienen
+                to_delete = [e.id_item for e in existing if e.id_item not in desired_codes]
+                if to_delete:
+                    ItemConfigurationDetail.objects.filter(
+                        configuration_id=cfg.code,
+                        id_item__in=to_delete
+                    ).delete()
+
+                # 🟢 crear nuevos y actualizar existentes
+                to_create = []
+
+                for d in desired:
+                    existing_obj = existing_by_item.get(d["item_code"])
+
+                    if not existing_obj:
+                        to_create.append(
+                            ItemConfigurationDetail(
+                                code=str(uuid.uuid4()),
+                                detail=d["detail"],
+                                type_id=d["type_id"],
+                                configuration_id=cfg.code,
+                                id_item=d["item_code"],
+                                created_at=now,
+                                created_by=created_by,
+                            )
+                        )
+                    else:
+                        updated = False
+
+                        if existing_obj.detail != d["detail"]:
+                            existing_obj.detail = d["detail"]
+                            updated = True
+
+                        if existing_obj.type_id != d["type_id"]:
+                            existing_obj.type_id = d["type_id"]
+                            updated = True
+
+                        if updated:
+                            existing_obj.save(update_fields=["detail", "type_id"])
+
+                if to_create:
+                    ItemConfigurationDetail.objects.bulk_create(to_create)
 
             return Response({"detail": "Configuración guardada."}, status=status.HTTP_200_OK)
 
@@ -1064,7 +1105,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
         "is_confirmed",
         "provider",
         "type",
-        "group",
+        "group_id",
         "category",
     ]
     search_fields = ["description", "sku", "code", "obs"]

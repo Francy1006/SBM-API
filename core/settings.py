@@ -173,7 +173,6 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework.authentication.BasicAuthentication",
         "users.authentication.CustomTokenAuthentication",
-        "rest_framework.authentication.SessionAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -316,5 +315,6 @@ JAZZMIN_UI_TWEAKS = {
 
 
 CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8080",
     "http://localhost:8082",
 ]
