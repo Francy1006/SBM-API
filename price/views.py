@@ -128,52 +128,50 @@ class PriceCalculationFormulaView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
     def post(self, request):
-        sku = (request.data.get("sku") or "").strip()
-        item_type = (request.data.get("item_type") or "catalog").strip().lower()
 
-        if not sku:
-            return Response({"error": "El parámetro sku es requerido."}, status=400)
+        price_configuration = request.data.get("price_configuration")
+        base_net_amount = request.data.get("base_net_amount")
+        variables = request.data.get("variables", {})
 
-        model_map = {
-            "catalog": Catalog,
-            "product": Product,
-            "material": Material,
-            "service": Service,
-        }
+        if not price_configuration:
+            return Response({"error": "price_configuration es requerido."}, status=400)
 
-        Model = model_map.get(item_type)
-        if not Model:
-            return Response({"error": "item_type inválido."}, status=400)
+        if base_net_amount is None:
+            return Response({"error": "base_net_amount es requerido."}, status=400)
 
-        obj = Model.objects.filter(sku=sku).first()
-        if not obj:
-            return Response({"error": "Item no encontrado."}, status=404)
+        try:
+            base_net_amount = float(base_net_amount)
+        except:
+            return Response({"error": "base_net_amount inválido."}, status=400)
 
-        price_code = getattr(obj, "price_id", None) if item_type == "catalog" else getattr(obj, "price", None)
-        if not price_code:
-            return Response({"error": "Precio no encontrado para el item."}, status=404)
-
-        price = Price.objects.filter(code=price_code, is_current=True).first() \
-            or Price.objects.filter(code=price_code).first()
-
-        if not price:
-            return Response({"error": "Precio no encontrado para el item."}, status=404)
-
-        price_config = PriceConfiguration.objects.select_related("variable_formula").filter(
-            code=price.price_configuration
-        ).first()
+        price_config = (
+            PriceConfiguration.objects
+            .select_related("variable_formula")
+            .filter(code=price_configuration)
+            .first()
+        )
 
         if not price_config:
-            return Response({"error": "Configuración de precio no encontrada."}, status=400)
+            return Response({"error": "Configuración no encontrada."}, status=404)
 
         vf = price_config.variable_formula
         if not vf or not vf.formula_template:
-            return Response({"error": "Fórmula no encontrada o inválida."}, status=400)
+            return Response({"error": "Fórmula no encontrada."}, status=400)
 
         formula_template = vf.formula_template
 
+        # =====================================================
+        # 🔵 CONTEXTO BASE
+        # =====================================================
+        context = {
+            "base_net_amount": base_net_amount
+        }
+
+        # =====================================================
+        # 🔵 VARIABLES FISCALES (IVA, ETC.)
+        # =====================================================
         fiscal_details = FiscalConfigurationDetail.objects.filter(
-            price_configuration=price.price_configuration
+            price_configuration=price_configuration
         )
 
         from accounting.models import FiscalDirective
@@ -182,47 +180,66 @@ class PriceCalculationFormulaView(APIView):
         directives = FiscalDirective.objects.filter(code__in=directive_codes)
         directive_map = {d.code: d for d in directives}
 
-        context = {"base_net_amount": float(price.base_net_amount)}
-
         for detail in fiscal_details:
             directive = directive_map.get(detail.fiscal_directive)
             if directive and detail.var:
-                context[detail.var] = float(directive.value)
+                try:
+                    context[detail.var] = float(directive.value)
+                except:
+                    context[detail.var] = 0.0
 
+        # =====================================================
+        # 🔴 VARIABLES EXTRA DESDE FRONT
+        # =====================================================
+        if isinstance(variables, dict):
+            for k, v in variables.items():
+                try:
+                    context[k] = float(v)
+                except:
+                    context[k] = 0.0
+
+        # =====================================================
+        # 🧮 EVALUADOR COMPATIBLE CON Label:format=expr;
+        # =====================================================
         results = {}
-        pattern = r"([a-zA-Z0-9_]+)\s*=([^;|]+)"
-        matches = re.findall(pattern, formula_template)
 
-        for field, expr in matches:
-            expr_eval = expr.strip()
+        clean_formula = str(formula_template).replace("|", "")
+        lines = [l.strip() for l in clean_formula.split(";") if l.strip()]
+
+        for line in lines:
+
+            if "=" not in line:
+                continue
+
+            raw_label, expr = line.split("=", 1)
+            raw_label = raw_label.strip()
+            expr = expr.strip()
+
+            # Separar label y formato
+            if ":" in raw_label:
+                label, _format = raw_label.split(":", 1)
+                label = label.strip()
+            else:
+                label = raw_label
+
+            # Reemplazar ${variables}
             for var, value in context.items():
-                expr_eval = expr_eval.replace(f"${{{var}}}", str(value))
+                expr = expr.replace(f"${{{var}}}", str(value))
 
             try:
-                value = eval(expr_eval, {"__builtins__": {}})
+                value = eval(expr, {"__builtins__": {}})
             except Exception as e:
                 return Response(
-                    {"error": f"Error evaluando la fórmula para {field}: {e}", "expr": expr_eval},
+                    {
+                        "error": f"Error evaluando {label}: {e}",
+                        "expr": expr
+                    },
                     status=400,
                 )
 
-            results[field.strip()] = value
+            results[label] = round(float(value), 2)
 
-        with transaction.atomic():
-            for field in ["net_amount", "gross_amount", "iva_amount"]:
-                if field in results:
-                    setattr(price, field, int(round(results[field])))
-            price.save()
-
-        return Response({
-            "sku": sku,
-            "item_type": item_type,
-            "price_code": price_code,
-            "price_configuration": price.price_configuration,
-            "formula_template": formula_template,
-            "variables": context,
-            "results": results,
-        })
+        return Response(results)
 
 
 class VariableFormulaView(APIView):

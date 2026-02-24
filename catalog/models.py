@@ -332,15 +332,21 @@ class ItemConfiguration(models.Model):
 
 
 class ItemConfigurationDetail(models.Model):
-    code = models.CharField(max_length=36)  # en DB no es único global, pero lo usamos como campo normal
+    code = models.CharField(max_length=36)
     detail = models.CharField(max_length=50)
     type = models.ForeignKey('ItemType', db_column='type', on_delete=models.CASCADE)
-    configuration = models.ForeignKey('ItemConfiguration', db_column='configuration', to_field='code', on_delete=models.CASCADE)
-    id_item = models.CharField(max_length=36)  # UUID del Product/Material/Service (campo code en esas tablas)
+    configuration = models.ForeignKey(
+        'ItemConfiguration',
+        db_column='configuration',
+        to_field='code',
+        on_delete=models.CASCADE
+    )
+    id_item = models.CharField(max_length=36)
+    quantity = models.IntegerField(default=1)  # NUEVA COLUMNA REAL EN DB
     created_at = models.DateTimeField()
     created_by = models.CharField(max_length=36)
 
     class Meta:
         db_table = 'item_configuration_detail'
-        managed = False  # tabla ya existe
+        managed = False
 
