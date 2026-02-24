@@ -7,20 +7,44 @@ from .models import (
 
 
 class PriceSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo Price
-    """
     field_verbose_names = serializers.SerializerMethodField()
 
     class Meta:
         model = Price
         fields = [
-            'id', 'code', 'net_amount', 'gross_amount', 'iva_amount', 'retention_amount',
-            'price_fiscal_configuration', 'is_active', 'is_deleted', 'is_confirmed',
-            'created_at', 'updated_at', 'confirmed_at', 'deleted_at', 'created_by',
-            'confirmed_by', 'updated_by', 'deleted_by', 'field_verbose_names'
+            'id',
+            'code',
+            'base_net_amount',
+            'net_amount',
+            'gross_amount',
+            'iva_amount',
+            'aditional_tax_amount',
+            'retention_amount',
+            'price_configuration',
+            'is_current',
+            'is_deleted',
+            'is_confirmed',
+            'created_at',
+            'created_by',
+            'record_item_code',
+            'price_record_type',
+            'field_verbose_names',
         ]
-        read_only_fields = ['id', 'code', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
+
+        read_only_fields = [
+            'id',
+            'code',
+            'created_at',
+            'created_by',   # 🔥 IMPORTANTE
+        ]
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        user_code = getattr(getattr(request, "user", None), "code", None)
+
+        validated_data["created_by"] = user_code
+
+        return super().create(validated_data)
 
     def get_field_verbose_names(self, obj):
         return {field.name: field.verbose_name for field in obj._meta.fields}

@@ -24,9 +24,6 @@ from price.models import Price
 
 
 class CatalogSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo Catalog con datos relacionados
-    """
 
     field_verbose_names = serializers.SerializerMethodField()
     menu_name = serializers.SerializerMethodField()
@@ -36,113 +33,96 @@ class CatalogSerializer(serializers.ModelSerializer):
     restriction_name = serializers.SerializerMethodField()
     usage_instructions_name = serializers.SerializerMethodField()
     configuration_name = serializers.SerializerMethodField()
-    price_data = serializers.DictField(write_only=True, required=True)
+
+    price_data = serializers.DictField(write_only=True, required=False)
+
+    base_net_amount = serializers.IntegerField(
+        source="price.base_net_amount", read_only=True
+    )
+
+    price_configuration = serializers.CharField(
+        source="price.price_configuration.code", read_only=True
+    )
+
+    # ==============================
+    # GETTERS
+    # ==============================
+
+    def get_menu_name(self, obj):
+        return obj.menu.menu if obj.menu else None
+
+    def get_item_group_name(self, obj):
+        return obj.item_group.group_name if obj.item_group else None
+
+    def get_category_name(self, obj):
+        return obj.category.category if obj.category else None
+
+    def get_type_name(self, obj):
+        return obj.type.type if obj.type else None
+
+    def get_restriction_name(self, obj):
+        return obj.restriction.restriction if obj.restriction else None
+
+    def get_usage_instructions_name(self, obj):
+        return obj.usage_instructions.instruction if obj.usage_instructions else None
+
+    def get_configuration_name(self, obj):
+        return obj.configuration.configuration if obj.configuration else None
 
     def get_field_verbose_names(self, obj):
         field_names = [
-            "code",
-            "sku",
-            "menu",
-            "name",
-            "description",
-            "item_group",
-            "category",
-            "type",
-            "chef_recommendation",
-            "min_quantity_purchase",
-            "rations_quantity",
-            "cover_image",
-            "is_visible",
-            "is_deleted",
-            "is_confirmed",
-            "restriction",
+            "code","sku","menu","name","description","item_group","category",
+            "type","chef_recommendation","min_quantity_purchase",
+            "rations_quantity","cover_image","is_visible",
+            "is_deleted","is_confirmed","restriction",
         ]
-        return {
-            field: (
-                obj._meta.get_field(field).verbose_name
-                if hasattr(obj._meta, "get_field")
-                else field
-            )
-            for field in field_names
-        }
+        return {field: obj._meta.get_field(field).verbose_name for field in field_names}
 
-    def get_menu_name(self, obj):
-        try:
-            return obj.menu.menu if obj.menu else None
-        except Exception:
-            return None
-
-    def get_item_group_name(self, obj):
-        try:
-            return obj.item_group.group_name if obj.item_group else None
-        except Exception:
-            return None
-
-    def get_category_name(self, obj):
-        try:
-            return obj.category.category if obj.category else None
-        except Exception:
-            return None
-
-    def get_type_name(self, obj):
-        try:
-            return obj.type.type if obj.type else None
-        except Exception:
-            return None
-
-    def get_restriction_name(self, obj):
-        try:
-            return obj.restriction.restriction if obj.restriction else None
-        except Exception:
-            return None
-
-    def get_usage_instructions_name(self, obj):
-        try:
-            return (
-                obj.usage_instructions.instruction if obj.usage_instructions else None
-            )
-        except Exception:
-            return None
-
-    def get_configuration_name(self, obj):
-        try:
-            return obj.configuration.configuration if obj.configuration else None
-        except Exception:
-            return None
+    # ==============================
+    # CREATE
+    # ==============================
 
     def create(self, validated_data):
-        request = self.context.get("request", None)
-        price_data = validated_data.pop("price_data", None)
-
-        if not price_data:
-            raise serializers.ValidationError({"price_data": "Este campo es requerido."})
-
+        request = self.context.get("request")
         user_code = getattr(getattr(request, "user", None), "code", None)
-        if not user_code:
-            raise serializers.ValidationError({"created_by": "Usuario inválido."})
-
-        # ✅ configuration es NOT NULL (FK a ItemConfiguration.code)
-        cfg_code = validated_data.get("configuration")
-        if not cfg_code:
-            default_cfg = ItemConfiguration.objects.order_by("-id").first()
-            if not default_cfg:
-                raise serializers.ValidationError({"configuration": "No existe una configuración por defecto para asignar."})
-            validated_data["configuration"] = default_cfg
-        else:
-            try:
-                validated_data["configuration"] = ItemConfiguration.objects.get(code=cfg_code)
-            except ItemConfiguration.DoesNotExist:
-                raise serializers.ValidationError({"configuration": "Configuración inválida."})
-
         now = timezone.now()
 
+        price_data = validated_data.pop("price_data", None)
+        if not price_data:
+            raise serializers.ValidationError({"price_data": "Requerido."})
+
+        base_net = price_data.get("base_net_amount")
+        price_conf_value = price_data.get("price_configuration")
+
+        if base_net in [None, ""] or price_conf_value in [None, ""]:
+            raise serializers.ValidationError({"price_data": "Datos incompletos."})
+
+        from price.models import PriceConfiguration
+
+        # 🔥 Soporta UUID o nombre lógico
+        price_conf_obj = PriceConfiguration.objects.filter(
+            code=str(price_conf_value).strip()
+        ).first()
+
+        if not price_conf_obj:
+            price_conf_obj = PriceConfiguration.objects.filter(
+                price_configuration=str(price_conf_value).strip()
+            ).first()
+
+        if not price_conf_obj:
+            raise serializers.ValidationError(
+                {"price_configuration": "No existe PriceConfiguration válido."}
+            )
+
         with transaction.atomic():
+
             price = Price.objects.create(
-                base_net_amount=price_data["base_net_amount"],
+                base_net_amount=base_net,
                 gross_amount=0,
                 iva_amount=0,
                 retention_amount=0,
-                price_configuration=price_data["price_configuration"],
+                price_configuration=price_conf_obj,
+                is_current=True,
                 created_by=user_code,
                 created_at=now,
             )
@@ -156,49 +136,119 @@ class CatalogSerializer(serializers.ModelSerializer):
 
         return catalog
 
+    # ==============================
+    # UPDATE
+    # ==============================
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request")
+        user_code = getattr(getattr(request, "user", None), "code", None)
+        now = timezone.now()
+
+        price_data = validated_data.pop("price_data", None)
+        direct_price_code = validated_data.pop("price", None)
+
+        from price.models import PriceConfiguration
+
+        with transaction.atomic():
+
+            # 🔵 Versionado controlado
+            if price_data:
+
+                base_net = price_data.get("base_net_amount")
+                price_conf_value = price_data.get("price_configuration")
+
+                current_price = instance.price
+
+                if not current_price:
+                    raise serializers.ValidationError(
+                        {"price": "El catálogo no tiene Price asociado."}
+                    )
+
+                if (
+                    base_net is not None
+                    and int(base_net) != int(current_price.base_net_amount)
+                ):
+
+                    current_price.is_current = False
+                    current_price.save()
+
+                    # 🔥 Resolver FK correctamente
+                    price_conf_obj = None
+
+                    if price_conf_value:
+                        price_conf_obj = PriceConfiguration.objects.filter(
+                            code=str(price_conf_value).strip()
+                        ).first()
+
+                        if not price_conf_obj:
+                            price_conf_obj = PriceConfiguration.objects.filter(
+                                price_configuration=str(price_conf_value).strip()
+                            ).first()
+
+                        if not price_conf_obj:
+                            raise serializers.ValidationError(
+                                {"price_configuration": "No existe PriceConfiguration válido."}
+                            )
+                    else:
+                        price_conf_obj = current_price.price_configuration
+
+                    new_price = Price.objects.create(
+                        base_net_amount=base_net,
+                        gross_amount=0,
+                        iva_amount=0,
+                        retention_amount=0,
+                        price_configuration=price_conf_obj,
+                        record_item_code=instance.code,
+                        price_record_type=1,
+                        is_current=True,
+                        created_by=user_code,
+                        created_at=now,
+                    )
+
+                    instance.price = new_price
+
+            # 🔴 Asignación directa
+            elif direct_price_code:
+
+                new_price = Price.objects.filter(
+                    code=str(direct_price_code).strip()
+                ).first()
+
+                if not new_price:
+                    raise serializers.ValidationError(
+                        {"price": "No existe Price con ese code."}
+                    )
+
+                instance.price = new_price
+
+            # 🔵 Update normal
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+
+            instance.updated_by = user_code
+            instance.updated_at = now
+            instance.save()
+
+        return instance
+
     class Meta:
         model = Catalog
         fields = [
-            "code",
-            "sku",
-            "cover_image",
-            "menu",
-            "menu_name",
-            "name",
-            "description",
-            "item_group",
-            "item_group_name",
-            "category",
-            "category_name",
-            "type",
-            "type_name",
-            "chef_recommendation",
-            "usage_instructions",
-            "usage_instructions_name",
-            "min_quantity_purchase",
-            "rations_quantity",
-            "is_visible",
-            "is_deleted",
-            "is_confirmed",
-            "restriction",
-            "restriction_name",
-            "configuration",
-            "configuration_name",
-            "field_verbose_names",
-            "price_data",
-            "price",
+            "code","sku","cover_image","menu","menu_name","name","description",
+            "item_group","item_group_name","category","category_name",
+            "type","type_name","chef_recommendation","usage_instructions",
+            "usage_instructions_name","min_quantity_purchase",
+            "rations_quantity","is_visible","is_deleted","is_confirmed",
+            "restriction","restriction_name","configuration",
+            "configuration_name","field_verbose_names","price_data",
+            "price","base_net_amount","price_configuration",
         ]
+
         read_only_fields = [
-            "code",
-            "created_at",
-            "updated_at",
-            "deleted_at",
-            "created_by",
-            "confirmed_by",
-            "updated_by",
-            "deleted_by",
-            "price",
-            "configuration",
+            "code","created_at","updated_at","deleted_at",
+            "created_by","confirmed_by","updated_by",
+            "deleted_by","price",
         ]
 
 
@@ -597,6 +647,7 @@ class CatalogListSerializer(serializers.Serializer):
     is_confirmed = serializers.BooleanField(allow_null=True, required=False)
     created_at = serializers.DateTimeField()
 
+
 class ItemConfigurationSerializer(serializers.ModelSerializer):
     field_verbose_names = serializers.SerializerMethodField()
 
@@ -703,6 +754,7 @@ class ItemConfigurationSerializer(serializers.ModelSerializer):
             "deleted_at",
             "deleted_by",
         ]
+
 
 class PackageSerializer(serializers.ModelSerializer):
     field_verbose_names = serializers.SerializerMethodField()
