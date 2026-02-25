@@ -128,3 +128,22 @@ class AuditLog(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.get_action_display()} - {self.model_name}"  # type: ignore
+
+
+
+class Status(models.Model):
+    id = models.AutoField(primary_key=True)
+    code = models.CharField(max_length=50, unique=True)
+    name = models.CharField(max_length=50)
+    description = models.TextField(null=True, blank=True)
+    module = models.CharField(max_length=50, null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "status"
+        managed = False
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.module} - {self.name}"

@@ -1,10 +1,12 @@
 from django.shortcuts import render
+from rest_framework.views import APIView
 from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import SystemConfig, FranchiseConfig, NotificationTemplate, AuditLog
+from rest_framework.response import Response
+from .models import SystemConfig, FranchiseConfig, NotificationTemplate, AuditLog, Status
 from .serializers import (
     SystemConfigSerializer, FranchiseConfigSerializer,
-    NotificationTemplateSerializer, AuditLogSerializer
+    NotificationTemplateSerializer, AuditLogSerializer, StatusSerializer
 )
 
 # Create your views here.
@@ -59,3 +61,15 @@ class AuditLogViewSet(viewsets.ModelViewSet):
     search_fields = ['object_id', 'details', 'ip_address']
     ordering_fields = ['action', 'created_at']
     ordering = ['-created_at']
+
+
+class StatusByModuleView(APIView):
+
+    def get(self, request, module):
+        queryset = Status.objects.filter(
+            module=module,
+            is_active=True
+        ).order_by("id")
+
+        serializer = StatusSerializer(queryset, many=True)
+        return Response(serializer.data)

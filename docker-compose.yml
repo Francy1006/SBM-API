@@ -20,6 +20,7 @@ services:
       - ./sales:/usr/src/app/sales
       - ./users:/usr/src/app/users
       - ./templates:/usr/src/app/templates
+      - ./clients:/usr/src/app/clients
       - ./manage.py:/usr/src/app/manage.py
       - ./.env:/usr/src/app/.env
       - /etc/localtime:/etc/localtime:ro      # <-- Añadido para zona horaria
