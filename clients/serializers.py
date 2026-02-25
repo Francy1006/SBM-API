@@ -1,9 +1,8 @@
 # serializers.py
 from rest_framework import serializers
-from .models import Client, ClientBrand
+from .models import Client, ClientBrand, District, Region
 
 
-# 🔹 Serializer normal de Client
 class ClientSerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -48,13 +47,15 @@ class ClientSerializer(serializers.ModelSerializer):
         ]
 
 
-# 🔥 Serializer del GRID (ClientBrand + flatten Client)
 class ClientBrandGridSerializer(serializers.ModelSerializer):
 
-    # 🔥 NECESARIO para PATCH desde el grid
-    client_code = serializers.CharField(source="client.code", read_only=True)
+    # 🔥 Campo interno para PATCH
+    client_code = serializers.CharField(
+        source="client.code",
+        write_only=True
+    )
 
-    # 🔹 Flatten desde Client
+    # 🔹 Flatten Client
     status = serializers.IntegerField(source="client.status")
     progress = serializers.CharField(source="client.progress", allow_null=True, required=False)
     exact_address = serializers.CharField(source="client.exact_address")
@@ -106,9 +107,8 @@ class ClientBrandGridSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClientBrand
         fields = [
-            # 🔥 Orden exacto del grid
             "id",
-            "client_code",  # ← clave para PATCH
+            "client_code",  # write_only → no aparece en GET
             "brand_name",
             "status",
             "progress",
@@ -137,15 +137,24 @@ class ClientBrandGridSerializer(serializers.ModelSerializer):
             "is_deleted",
         ]
 
-    # 🔥 Permite PATCH desde el grid
     def update(self, instance, validated_data):
-
         client_data = validated_data.get("client", {})
 
         if client_data:
             for attr, value in client_data.items():
                 setattr(instance.client, attr, value)
-
             instance.client.save()
 
         return instance
+
+
+class RegionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Region
+        fields = "__all__"
+
+
+class DistrictSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = District
+        fields = "__all__"

@@ -1,9 +1,14 @@
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters
-from .models import Client, ClientBrand
-from .serializers import ClientSerializer, ClientBrandGridSerializer
+from rest_framework.filters import SearchFilter, OrderingFilter
 
+from .models import Client, ClientBrand, District, Region
+from .serializers import (
+    ClientSerializer,
+    ClientBrandGridSerializer,
+    DistrictSerializer,
+    RegionSerializer,
+)
 
 # 🔹 CRUD real de Client (necesario para PATCH /clients/{code}/)
 class ClientViewSet(viewsets.ModelViewSet):
@@ -21,7 +26,7 @@ class ClientBrandViewSet(viewsets.ModelViewSet):
     queryset = ClientBrand.objects.select_related("client").all()
     serializer_class = ClientBrandGridSerializer
 
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
     filterset_fields = [
         "client__status",
@@ -46,3 +51,24 @@ class ClientBrandViewSet(viewsets.ModelViewSet):
     ]
 
     ordering = ["-id"]
+
+
+    
+
+
+class DistrictViewSet(viewsets.ModelViewSet):
+    queryset = District.objects.all()
+    serializer_class = DistrictSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ["district"]
+    ordering_fields = ["id", "district"]
+    ordering = ["district"]
+
+
+class RegionViewSet(viewsets.ModelViewSet):
+    queryset = Region.objects.all()
+    serializer_class = RegionSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ["region"]
+    ordering_fields = ["id", "region"]
+    ordering = ["region"]

@@ -16,7 +16,9 @@ class Client(models.Model):
 
     estimated_type = models.CharField(max_length=150, null=True, blank=True)
     operation_schedule = models.CharField(max_length=150, null=True, blank=True)
-    estimated_avg_ticket = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    estimated_avg_ticket = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
     has_visible_physical_store = models.BooleanField(default=False)
 
     company_name = models.CharField(max_length=255, null=True, blank=True)
@@ -31,7 +33,9 @@ class Client(models.Model):
     contact_date = models.DateField(null=True, blank=True)
     progress = models.TextField(null=True, blank=True)
 
-    estimated_potential_volume = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    estimated_potential_volume = models.DecimalField(
+        max_digits=14, decimal_places=2, null=True, blank=True
+    )
     priority = models.CharField(max_length=20, null=True, blank=True)
     observations = models.TextField(null=True, blank=True)
 
@@ -60,9 +64,9 @@ class ClientBrand(models.Model):
     code = models.CharField(max_length=36, unique=True)
 
     client = models.ForeignKey(
-        "Client",                 # usar string evita NameError
-        to_field="code",          # 🔥 FK apunta a code, no a id
-        db_column="client",       # nombre real columna
+        "Client",  # usar string evita NameError
+        to_field="code",  # 🔥 FK apunta a code, no a id
+        db_column="client",  # nombre real columna
         on_delete=models.DO_NOTHING,
         related_name="brands",
     )
@@ -76,3 +80,37 @@ class ClientBrand(models.Model):
     class Meta:
         db_table = "client_brand"
         managed = False
+
+
+class Region(models.Model):
+    id = models.AutoField(primary_key=True)
+    region = models.CharField(max_length=255)
+    description = models.TextField()
+
+    class Meta:
+        db_table = "region"
+        managed = False
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.region
+
+
+class District(models.Model):
+    id = models.AutoField(primary_key=True)
+    district = models.CharField(max_length=255)
+    region = models.ForeignKey(
+        Region,
+        on_delete=models.DO_NOTHING,
+        db_column="region",
+        related_name="districts",
+    )
+    description = models.TextField()
+
+    class Meta:
+        db_table = "district"
+        managed = False
+        ordering = ["id"]
+
+    def __str__(self):
+        return self.district
