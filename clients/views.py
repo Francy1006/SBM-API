@@ -1,6 +1,7 @@
 from rest_framework import viewsets
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
+from django.db.models import Q
 
 from .models import Client, ClientBrand, District, Region
 from .serializers import (
@@ -13,10 +14,12 @@ from .serializers import (
 # 🔹 CRUD real de Client (necesario para PATCH /clients/{code}/)
 class ClientViewSet(viewsets.ModelViewSet):
 
-    queryset = Client.objects.filter(is_deleted__isnull=True)
+    queryset = Client.objects.filter(
+    Q(is_deleted=False) | Q(is_deleted__isnull=True)
+)
     serializer_class = ClientSerializer
 
-    lookup_field = "code"      # 🔥 CLAVE para usar UUID
+    lookup_field = "code"   
     lookup_url_kwarg = "code"
 
 
