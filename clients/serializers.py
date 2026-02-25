@@ -85,6 +85,8 @@ class ClientBrandGridSerializer(serializers.ModelSerializer):
     status = serializers.IntegerField(source="client.status")
     district = serializers.IntegerField(source="client.district")
     region = serializers.IntegerField(source="client.region")
+    district_name = serializers.SerializerMethodField()
+    region_name = serializers.SerializerMethodField()
 
     # --- Detail fields (FK objects)
     status = serializers.IntegerField(source="client.status")
@@ -178,7 +180,9 @@ class ClientBrandGridSerializer(serializers.ModelSerializer):
             "exact_address",
             "observations",
             "district",
+            "district_name",
             "region",
+            "region_name",
             "same_address_detected",
             "detection_date",
             "estimated_type",
@@ -262,3 +266,12 @@ class ClientBrandGridSerializer(serializers.ModelSerializer):
             "id": region.id,
             "region": region.region,
         }
+    def get_district_name(self, obj):
+        district_id = obj.client.district
+        d = District.objects.filter(id=district_id).only("district").first()
+        return d.district if d else None
+
+    def get_region_name(self, obj):
+        region_id = obj.client.region
+        r = Region.objects.filter(id=region_id).only("region").first()
+        return r.region if r else None
