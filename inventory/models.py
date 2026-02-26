@@ -418,7 +418,7 @@ class Provider(models.Model):
 
     class Meta:
         db_table = "provider"
-        ordering = ["provider"]
+        managed = False
 
     def __str__(self):
         return self.provider

@@ -410,8 +410,8 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            "id","code","sku","description","obs",
-            "package_unit","min_package_purchase",
+            "id","code","sku","description","base_net_amount","net_amount",
+            "obs","package_unit","min_package_purchase",
             "provider","provider_name",
             "type","type_name",
             "item_group","item_group_name",
@@ -421,7 +421,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "created_at","updated_at","confirmed_at","deleted_at",
             "created_by","confirmed_by","updated_by","deleted_by",
             "log","version",
-            "base_net_amount","net_amount","gross_amount",
+            "gross_amount",
             "iva_amount","aditional_tax_amount","retention_amount",
             "price_configuration",
             "field_verbose_names",
@@ -858,7 +858,6 @@ class MeasureUnitSerializer(serializers.ModelSerializer):
         model = MeasureUnit
         fields = ["id", "measure_unit", "description"]
         read_only_fields = ["id"]
-
 
 class InstructionTypeSerializer(serializers.ModelSerializer):
     class Meta:

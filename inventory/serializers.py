@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Warehouse, InventoryItem, InventoryMovement, InventoryCount, InventoryCountItem, Package, PackageType, TransportType, MeasureUnit
+from .models import Warehouse, InventoryItem, InventoryMovement, InventoryCount, InventoryCountItem, Package, PackageType, TransportType, MeasureUnit, Provider
 
 
 class WarehouseSerializer(serializers.ModelSerializer):
@@ -214,3 +214,8 @@ class PackageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Package
         fields = '__all__' 
+
+class ProviderSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Provider
+        fields = "__all__"

@@ -1,11 +1,11 @@
 from django.shortcuts import render
 from rest_framework import viewsets, filters
 from django_filters.rest_framework import DjangoFilterBackend
-from .models import Warehouse, InventoryItem, InventoryMovement, InventoryCount, InventoryCountItem, Package, PackageType, TransportType, MeasureUnit
+from .models import Warehouse, InventoryItem, InventoryMovement, InventoryCount, InventoryCountItem, Package, PackageType, TransportType, MeasureUnit, Provider
 from .serializers import (
     WarehouseSerializer, InventoryItemSerializer, InventoryMovementSerializer,
     InventoryCountSerializer, InventoryCountItemSerializer,
-    PackageSerializer, PackageTypeSerializer, TransportTypeSerializer, MeasureUnitSerializer
+    PackageSerializer, PackageTypeSerializer, TransportTypeSerializer, MeasureUnitSerializer, ProviderSerializer
 )
 
 # Create your views here.
@@ -110,3 +110,16 @@ class MeasureUnitViewSet(viewsets.ModelViewSet):
     search_fields = ['measure_unit', 'description']
     ordering_fields = ['id', 'measure_unit']
     ordering = ['measure_unit']
+
+
+class ProviderViewSet(viewsets.ModelViewSet):
+    queryset = Provider.objects.all()
+    serializer_class = ProviderSerializer
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['is_active', 'is_deleted', 'is_confirmed']
+    search_fields = ['provider']
+    ordering_fields = ['provider', 'created_at']
+    ordering = ['provider']
+
+
+
