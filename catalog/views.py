@@ -885,9 +885,10 @@ class CatalogViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all()  # type: ignore
+    queryset = Product.objects.all()
     serializer_class = ProductSerializer
-    lookup_field = "sku"
+    lookup_field = "code"
+
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = [
         "is_active",
@@ -907,6 +908,10 @@ class ProductViewSet(viewsets.ModelViewSet):
             model = Price
             fields = "__all__"
 
+    # ===============================
+    # CREATE
+    # ===============================
+
     def perform_create(self, serializer):
         if hasattr(self.request.user, "code"):
             product = serializer.save(created_by=self.request.user.code)
@@ -924,24 +929,20 @@ class ProductViewSet(viewsets.ModelViewSet):
                 format="json",
             )
 
-            if hasattr(self.request, "user") and self.request.user.is_authenticated:
+            if self.request.user.is_authenticated:
                 calculation_request.user = self.request.user
 
-            calculation_view = PriceCalculationFormulaView.as_view()
-            calculation_response = calculation_view(calculation_request)
-
-            if calculation_response.status_code != 200:
-                print(
-                    f"Warning: Price calculation failed for product {product.sku}: {calculation_response.status_code}"
-                )
+            PriceCalculationFormulaView.as_view()(calculation_request)
 
         except Exception as e:
-            print(
-                f"Error executing price calculation for product {product.sku}: {str(e)}"
-            )
+            print(f"Price calculation error: {str(e)}")
+
+    # ===============================
+    # UPDATE WITH VERSIONED PRICE
+    # ===============================
 
     def partial_update(self, request, *args, **kwargs):
-        price_data = request.data.get("price_data", None)
+        price_data = request.data.get("price_data")
         instance = self.get_object()
 
         if price_data:
@@ -955,20 +956,11 @@ class ProductViewSet(viewsets.ModelViewSet):
 
             changed = False
 
-            if base_net_amount_new is not None and str(
-                price_obj.base_net_amount
-            ) != str(base_net_amount_new):
+            if str(price_obj.base_net_amount) != str(base_net_amount_new):
                 changed = True
 
-            if price_configuration_new is not None and (
-                str(
-                    getattr(
-                        price_obj.price_configuration,
-                        "code",
-                        price_obj.price_configuration,
-                    )
-                )
-                != str(price_configuration_new)
+            if str(getattr(price_obj.price_configuration, "code", None)) != str(
+                price_configuration_new
             ):
                 changed = True
 
@@ -979,52 +971,34 @@ class ProductViewSet(viewsets.ModelViewSet):
                     price_obj.is_current = False
                     price_obj.save()
 
-                    # 🔥 Resolver FK correctamente
-                    price_conf_obj = None
+                    price_conf_obj = PriceConfiguration.objects.filter(
+                        code=str(price_configuration_new)
+                    ).first()
 
-                    if price_configuration_new:
-                        price_conf_obj = PriceConfiguration.objects.filter(
-                            code=str(price_configuration_new).strip()
-                        ).first()
-
-                        if not price_conf_obj:
-                            price_conf_obj = PriceConfiguration.objects.filter(
-                                price_configuration=str(price_configuration_new).strip()
-                            ).first()
-
-                        if not price_conf_obj:
-                            return Response(
-                                {"detail": "PriceConfiguration inválido."},
-                                status=400,
-                            )
-                    else:
-                        price_conf_obj = price_obj.price_configuration
+                    if not price_conf_obj:
+                        return Response(
+                            {"detail": "PriceConfiguration inválido."},
+                            status=400,
+                        )
 
                     price_data_new = self._SimplePriceSerializer(price_obj).data
-                    price_data_new.pop("id", None)
-                    price_data_new.pop("code", None)
-                    price_data_new.pop("created_at", None)
+                    for k in ["id", "code", "created_at"]:
+                        price_data_new.pop(k, None)
 
                     price_data_new["base_net_amount"] = base_net_amount_new
                     price_data_new["price_configuration"] = price_conf_obj
                     price_data_new["is_current"] = True
 
                     new_price = Price.objects.create(**price_data_new)
-                    new_price.refresh_from_db()
 
                     instance.price = new_price.code
                     instance.save()
 
-            product_fields = set(request.data.keys()) - {"price_data"}
-            for field in product_fields:
-                if hasattr(instance, field):
-                    setattr(instance, field, request.data[field])
-
-            instance.save()
-            serializer = self.get_serializer(instance)
-            return Response(serializer.data)
-
         return super().partial_update(request, *args, **kwargs)
+
+    # ===============================
+    # QUERYSET
+    # ===============================
 
     def get_queryset(self):
         qs = Product.objects.select_related(
@@ -1046,17 +1020,16 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         return qs
 
+    # ===============================
+    # LIST CUSTOM
+    # ===============================
+
     @action(detail=False, methods=["get"], url_path="list")
     def product_list(self, request):
         try:
-            from price.models import PriceConfiguration
-
             products = self.get_queryset()
-
-            if request.query_params.get("active_only") == "true":
-                products = products.filter(is_active=True, is_deleted=False)
-
             results = []
+
             for product in products:
                 current_price = (
                     product.price
@@ -1069,40 +1042,35 @@ class ProductViewSet(viewsets.ModelViewSet):
                         "code": product.code,
                         "sku": product.sku,
                         "description": product.description,
-                        "base_net_amount": (
-                            current_price.base_net_amount if current_price else 0
+                        "base_net_amount": getattr(current_price, "base_net_amount", 0),
+                        "net_amount": getattr(current_price, "net_amount", 0),
+                        "gross_amount": getattr(current_price, "gross_amount", 0),
+                        "iva_amount": getattr(current_price, "iva_amount", 0),
+                        "aditional_tax_amount": getattr(
+                            current_price, "aditional_tax_amount", 0
                         ),
-                        "net_amount": current_price.net_amount if current_price else 0,
-                        "gross_amount": (
-                            current_price.gross_amount if current_price else 0
-                        ),
-                        "iva_amount": current_price.iva_amount if current_price else 0,
-                        "aditional_tax_amount": (
-                            getattr(current_price, "aditional_tax_amount", 0)
-                            if current_price
-                            else 0
-                        ),
-                        "retention_amount": (
-                            current_price.retention_amount if current_price else 0
+                        "retention_amount": getattr(
+                            current_price, "retention_amount", 0
                         ),
                         "price_configuration_label": (
                             current_price.price_configuration.price_configuration
                             if current_price and current_price.price_configuration
                             else None
                         ),
-                        "obs": product.obs,
-                        "package_unit": product.package_unit,
-                        "min_package_purchase": product.min_package_purchase,
-                        "provider": product.provider,
-                        "type": product.type,
+                        "provider": product.provider_id,
+                        "type": product.type_id,
+                        "item_group": product.item_group_id,
+                        "category": product.category_id,
                         "type_name": product.type.type if product.type else None,
-                        "item_group": product.item_group,
-                        "group_name": product.item_group.group_name if product.item_group else None,
-                        "category": product.category,
-                        "category_name": product.category.category if product.category else None,
+                        "group_name": (
+                            product.item_group.group_name
+                            if product.item_group
+                            else None
+                        ),
+                        "category_name": (
+                            product.category.category if product.category else None
+                        ),
                         "url": product.url,
-                        "package": product.package,
-                        "package_description": product.package.description if product.package else None,
                         "is_active": product.is_active,
                         "is_deleted": product.is_deleted,
                         "is_confirmed": product.is_confirmed,
@@ -1110,110 +1078,86 @@ class ProductViewSet(viewsets.ModelViewSet):
                     }
                 )
 
-            verbose_names = {
-                "code": "Código",
-                "sku": "SKU",
-                "description": "Descripción",
-                "base_net_amount": "Valor Base Neto",
-                "net_amount": "Valor Neto",
-                "gross_amount": "Valor Bruto",
-                "iva_amount": "IVA",
-                "aditional_tax_amount": "Impuesto Adicional",
-                "retention_amount": "Retención",
-                "price_configuration": "Configuración de Precio",
-                "price_configuration_label": "Configuración Precio",
-                "obs": "Observaciones",
-                "package_unit": "Unidad de Empaque",
-                "min_package_purchase": "Compra Mínima de Empaque",
-                "provider": "Proveedor",
-                "type": "Tipo",
-                "type_name": "Nombre de Tipo",
-                "item_group": "Grupo",
-                "group_name": "Nombre de Grupo",
-                "category": "Categoría",
-                "category_name": "Nombre de Categoría",
-                "url": "URL",
-                "package": "Paquete",
-                "package_description": "Descripción del Paquete",
-                "is_active": "Está Activo",
-                "is_deleted": "Está Eliminado",
-                "is_confirmed": "Está Confirmado",
-                "created_at": "Fecha de Creación",
-            }
-
-            page = self.paginate_queryset(results)
-            if page is not None:
-                serializer = ProductListSerializer(page, many=True)
-                return self.get_paginated_response(
-                    {"results": serializer.data, "verbose_names": verbose_names}
-                )
-
-            serializer = ProductListSerializer(results, many=True)
-            return Response(
-                {"results": serializer.data, "verbose_names": verbose_names}
-            )
+            return Response({"results": results, "verbose_names": {}})
 
         except Exception as e:
             return Response(
-                {"error": f"Error obteniendo lista de productos: {str(e)}"}, status=500
+                {"error": f"Error obteniendo lista de productos: {str(e)}"},
+                status=500,
             )
 
-    @action(detail=False, methods=["get"])
-    def active(self, request):
-        queryset = self.get_queryset().filter(is_active=True, is_deleted=False)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+    # ===============================
+    # 🔥 CONFIG FOR PRODUCT
+    # ===============================
 
-    @action(detail=False, methods=["get"])
-    def by_provider(self, request):
-        provider_id = request.query_params.get("provider_id")
-        if provider_id:
-            queryset = self.get_queryset().filter(provider=provider_id, is_active=True)
-        else:
-            queryset = self.get_queryset().filter(is_active=True)
+    @action(detail=True, methods=["get"], url_path="config")
+    def config(self, request, code=None):
 
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        product = self.get_object()
+
+        price_obj = (
+            Price.objects.filter(code=product.price, is_current=True)
+            .select_related("price_configuration")
+            .first()
+        )
+
+        pc = getattr(price_obj, "price_configuration", None) if price_obj else None
+
+        informativa_data = {
+            "product_code": product.code,
+            "product_sku": product.sku,
+            "price_code": getattr(price_obj, "code", None),
+            "price_configuration": getattr(pc, "code", None),
+            "price_configuration_label": getattr(pc, "price_configuration", None),
+            "base_net_amount": getattr(price_obj, "base_net_amount", None),
+            "price_is_current": getattr(price_obj, "is_current", None),
+        }
+
+        calculation_props = None
+
+        if pc and getattr(pc, "code", None):
+            calculation_props = {
+                "code": pc.code,
+                "baseNetAmount": getattr(price_obj, "base_net_amount", None),
+                "netAmount": getattr(price_obj, "net_amount", None),
+                "grossAmount": getattr(price_obj, "gross_amount", None),
+                "ivaAmount": getattr(price_obj, "iva_amount", None),
+                "additionalTaxAmount": getattr(price_obj, "aditional_tax_amount", None),
+                "retentionAmount": getattr(price_obj, "retention_amount", None),
+                "selectedProductSku": product.sku,
+            }
+
+        return Response(
+            {
+                "informativa": {"data": informativa_data, "verbose_names": {}},
+                "calculation": {"props": calculation_props},
+                "linking": None,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # ===============================
+    # LOOKUP
+    # ===============================
 
     @action(detail=False, methods=["get"], url_path="lookup")
     def lookup(self, request):
-        """
-        Autocomplete liviano:
-        GET /products/lookup/?q=pollo&limit=10
-        Retorna [{sku, description, obs}]
-        """
         q = (request.query_params.get("q") or "").strip()
-        limit = request.query_params.get("limit") or "10"
-
-        try:
-            limit = int(limit)
-        except Exception:
-            limit = 10
-
-        limit = max(1, min(limit, 50))
 
         if not q:
-            return Response({"results": []}, status=status.HTTP_200_OK)
+            return Response({"results": []})
 
-        qs = Product.objects.all()
-
-        # búsqueda simple y rápida
-        qs = qs.filter(
+        qs = Product.objects.filter(
             models.Q(sku__icontains=q)
             | models.Q(description__icontains=q)
             | models.Q(obs__icontains=q)
-        ).order_by("description")[:limit]
+        ).order_by("description")[:20]
 
         results = [
-            {
-                "sku": p.sku,
-                "description": p.description,
-                "obs": p.obs,
-            }
-            for p in qs
+            {"sku": p.sku, "description": p.description, "obs": p.obs} for p in qs
         ]
 
-        return Response({"results": results}, status=status.HTTP_200_OK)
+        return Response({"results": results})
 
 
 class MaterialViewSet(viewsets.ModelViewSet):
@@ -1261,6 +1205,62 @@ class MaterialViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=["get", "post"], url_path="config")
+    def config(self, request, code=None):
+
+        product = self.get_queryset().filter(code=code).first()
+        if not product:
+            return Response(
+                {"detail": "Producto no encontrado."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        price_obj = (
+            Price.objects.filter(code=product.price, is_current=True)
+            .select_related("price_configuration")
+            .first()
+        )
+
+        pc = getattr(price_obj, "price_configuration", None) if price_obj else None
+
+        cfg = getattr(product, "configuration", None)
+
+        # 🔥 SOLO GET (igual que catálogo)
+        if request.method == "GET":
+
+            informativa_data = {
+                "product_code": product.code,
+                "product_sku": product.sku,
+                "price_code": getattr(price_obj, "code", None),
+                "price_configuration": getattr(pc, "code", None),
+                "price_configuration_label": getattr(pc, "price_configuration", None),
+                "base_net_amount": getattr(price_obj, "base_net_amount", None),
+                "price_is_current": getattr(price_obj, "is_current", None),
+            }
+
+            calculation_props = {
+                "code": getattr(pc, "code", None),
+                "baseNetAmount": getattr(price_obj, "base_net_amount", None),
+                "netAmount": getattr(price_obj, "net_amount", None),
+                "grossAmount": getattr(price_obj, "gross_amount", None),
+                "ivaAmount": getattr(price_obj, "iva_amount", None),
+                "additionalTaxAmount": getattr(price_obj, "aditional_tax_amount", None),
+                "retentionAmount": getattr(price_obj, "retention_amount", None),
+                "selectedProductSku": product.sku,
+            }
+
+            return Response(
+                {
+                    "informativa": {
+                        "data": informativa_data,
+                        "verbose_names": {},
+                    },
+                    "calculation": {"props": calculation_props},
+                    "linking": None,  # 🔥 productos no usan linking tipo catálogo
+                },
+                status=status.HTTP_200_OK,
+            )
 
 
 class ServiceViewSet(viewsets.ModelViewSet):
