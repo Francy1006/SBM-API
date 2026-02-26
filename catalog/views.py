@@ -208,7 +208,9 @@ class CatalogViewSet(viewsets.ModelViewSet):
             serializer.save()
 
         headers = self.get_success_headers(serializer.data)
-        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+        return Response(
+            serializer.data, status=status.HTTP_201_CREATED, headers=headers
+        )
 
     @action(detail=False, methods=["post"], url_path="soft_delete")
     def soft_delete(self, request):
@@ -245,14 +247,19 @@ class CatalogViewSet(viewsets.ModelViewSet):
             price_codes = [c.price_id for c in page_qs if c.price_id]
             price_map = {
                 p.code: p
-                for p in Price.objects.filter(code__in=price_codes, is_current=True)
-                .select_related("price_configuration")
+                for p in Price.objects.filter(
+                    code__in=price_codes, is_current=True
+                ).select_related("price_configuration")
             }
 
             results = []
             for catalog in page_qs:
                 price_obj = price_map.get(catalog.price_id)
-                pc = getattr(price_obj, "price_configuration", None) if price_obj else None
+                pc = (
+                    getattr(price_obj, "price_configuration", None)
+                    if price_obj
+                    else None
+                )
 
                 results.append(
                     {
@@ -270,15 +277,15 @@ class CatalogViewSet(viewsets.ModelViewSet):
                         "type_name": type_dict.get(catalog.type_id),
                         "item_group": catalog.item_group_id,
                         "group_name": group_dict.get(catalog.item_group_id),
-
                         # ✅ NUNCA devolver objetos (PriceConfiguration) en JSON
                         "base_net_amount": getattr(price_obj, "base_net_amount", None),
                         "net_amount": getattr(price_obj, "net_amount", None),
                         "gross_amount": getattr(price_obj, "gross_amount", None),
                         "iva_amount": getattr(price_obj, "iva_amount", None),
                         "price_configuration": getattr(pc, "code", None),
-                        "price_configuration_label": getattr(pc, "price_configuration", None),
-
+                        "price_configuration_label": getattr(
+                            pc, "price_configuration", None
+                        ),
                         "min_quantity_purchase": catalog.min_quantity_purchase,
                         "rations_quantity": catalog.rations_quantity,
                         "item_configuration": catalog.configuration_id,
@@ -360,20 +367,19 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 "usage_instruction_url": getattr(instr, "url_documentation", None),
                 "usage_instruction_type_id": getattr(instr, "type_id", None),
                 "usage_instruction_type_name": getattr(instr_type, "type", None),
-
                 "price_code": getattr(price_obj, "code", None),
                 # ✅ NO objeto
                 "price_configuration": getattr(pc, "code", None),
                 "price_configuration_label": getattr(pc, "price_configuration", None),
-
                 "base_net_amount": getattr(price_obj, "base_net_amount", None),
                 "net_amount": getattr(price_obj, "net_amount", None),
                 "gross_amount": getattr(price_obj, "gross_amount", None),
                 "iva_amount": getattr(price_obj, "iva_amount", None),
-                "aditional_tax_amount": getattr(price_obj, "aditional_tax_amount", None),
+                "aditional_tax_amount": getattr(
+                    price_obj, "aditional_tax_amount", None
+                ),
                 "retention_amount": getattr(price_obj, "retention_amount", None),
                 "price_is_current": getattr(price_obj, "is_current", None),
-
                 "configuration_code": getattr(cfg, "code", None),
                 "configuration_name": getattr(cfg, "configuration", None),
                 "configuration_description": getattr(cfg, "description", None),
@@ -389,9 +395,13 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 "measure_unit_name": getattr(measure_unit, "measure_unit", None),
                 "quantity_unit": getattr(pkg, "quantity_unit", None),
                 "storage_instruction": getattr(storage_instr, "instruction", None),
-                "storage_instruction_url": getattr(storage_instr, "url_documentation", None),
+                "storage_instruction_url": getattr(
+                    storage_instr, "url_documentation", None
+                ),
                 "transport_instruction": getattr(transport_instr, "instruction", None),
-                "transport_instruction_url": getattr(transport_instr, "url_documentation", None),
+                "transport_instruction_url": getattr(
+                    transport_instr, "url_documentation", None
+                ),
             }
 
             advanced = {k: v for k, v in advanced.items() if v is not None}
@@ -493,7 +503,9 @@ class CatalogViewSet(viewsets.ModelViewSet):
 
         price_obj = None
         if obj and getattr(obj, "price", None):
-            price_obj = Price.objects.filter(code=obj.price).order_by("-created_at").first()
+            price_obj = (
+                Price.objects.filter(code=obj.price).order_by("-created_at").first()
+            )
 
         if price_obj:
             net_u = float(price_obj.net_amount or 0)
@@ -582,7 +594,9 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 for r in links_in:
                     if not isinstance(r, dict):
                         continue
-                    kind = (r.get("item_type") or r.get("item_kind") or "").strip().lower()
+                    kind = (
+                        (r.get("item_type") or r.get("item_kind") or "").strip().lower()
+                    )
                     if kind not in ("product", "material", "service"):
                         continue
                     add_rows(kind, [r])
@@ -600,16 +614,38 @@ class CatalogViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 now = timezone.now()
 
-                sku_products = [x["item_sku"] for x in links_payload if x["item_kind"] == "product" and x["item_sku"]]
-                sku_materials = [x["item_sku"] for x in links_payload if x["item_kind"] == "material" and x["item_sku"]]
-                sku_services = [x["item_sku"] for x in links_payload if x["item_kind"] == "service" and x["item_sku"]]
+                sku_products = [
+                    x["item_sku"]
+                    for x in links_payload
+                    if x["item_kind"] == "product" and x["item_sku"]
+                ]
+                sku_materials = [
+                    x["item_sku"]
+                    for x in links_payload
+                    if x["item_kind"] == "material" and x["item_sku"]
+                ]
+                sku_services = [
+                    x["item_sku"]
+                    for x in links_payload
+                    if x["item_kind"] == "service" and x["item_sku"]
+                ]
 
-                prod_by_sku = {p.sku: p for p in Product.objects.filter(sku__in=sku_products)}
-                mat_by_sku = {m.sku: m for m in Material.objects.filter(sku__in=sku_materials)}
-                srv_by_sku = {s.sku: s for s in Service.objects.filter(sku__in=sku_services)}
+                prod_by_sku = {
+                    p.sku: p for p in Product.objects.filter(sku__in=sku_products)
+                }
+                mat_by_sku = {
+                    m.sku: m for m in Material.objects.filter(sku__in=sku_materials)
+                }
+                srv_by_sku = {
+                    s.sku: s for s in Service.objects.filter(sku__in=sku_services)
+                }
 
-                existing = list(ItemConfigurationDetail.objects.filter(configuration_id=cfg.code))
-                existing_by_item = {e.id_item: e for e in existing if getattr(e, "id_item", None)}
+                existing = list(
+                    ItemConfigurationDetail.objects.filter(configuration_id=cfg.code)
+                )
+                existing_by_item = {
+                    e.id_item: e for e in existing if getattr(e, "id_item", None)
+                }
 
                 desired = []
                 for r in links_payload:
@@ -656,7 +692,9 @@ class CatalogViewSet(viewsets.ModelViewSet):
 
                 desired_codes = {d["item_code"] for d in desired}
 
-                to_delete = [e.id_item for e in existing if e.id_item not in desired_codes]
+                to_delete = [
+                    e.id_item for e in existing if e.id_item not in desired_codes
+                ]
                 if to_delete:
                     ItemConfigurationDetail.objects.filter(
                         configuration_id=cfg.code, id_item__in=to_delete
@@ -686,16 +724,22 @@ class CatalogViewSet(viewsets.ModelViewSet):
                         if existing_obj.type_id != d["type_id"]:
                             existing_obj.type_id = d["type_id"]
                             updated = True
-                        if float(getattr(existing_obj, "quantity", 1) or 1) != float(d["quantity"] or 1):
+                        if float(getattr(existing_obj, "quantity", 1) or 1) != float(
+                            d["quantity"] or 1
+                        ):
                             existing_obj.quantity = d["quantity"]
                             updated = True
                         if updated:
-                            existing_obj.save(update_fields=["detail", "type_id", "quantity"])
+                            existing_obj.save(
+                                update_fields=["detail", "type_id", "quantity"]
+                            )
 
                 if to_create:
                     ItemConfigurationDetail.objects.bulk_create(to_create)
 
-            return Response({"detail": "Configuración guardada."}, status=status.HTTP_200_OK)
+            return Response(
+                {"detail": "Configuración guardada."}, status=status.HTTP_200_OK
+            )
 
         try:
             # ✅ serializable
@@ -749,8 +793,12 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 )
 
                 id_items = [d.id_item for d in details if getattr(d, "id_item", None)]
-                prod_map = {p.code: p for p in Product.objects.filter(code__in=id_items)}
-                mat_map = {m.code: m for m in Material.objects.filter(code__in=id_items)}
+                prod_map = {
+                    p.code: p for p in Product.objects.filter(code__in=id_items)
+                }
+                mat_map = {
+                    m.code: m for m in Material.objects.filter(code__in=id_items)
+                }
                 srv_map = {s.code: s for s in Service.objects.filter(code__in=id_items)}
 
                 for d in details:
@@ -758,21 +806,39 @@ class CatalogViewSet(viewsets.ModelViewSet):
                     if not item_code:
                         continue
                     if item_code in prod_map:
-                        products_rows.append(self._serialize_detail_row(d, prod_map[item_code], "product"))
+                        products_rows.append(
+                            self._serialize_detail_row(
+                                d, prod_map[item_code], "product"
+                            )
+                        )
                     elif item_code in mat_map:
-                        materials_rows.append(self._serialize_detail_row(d, mat_map[item_code], "material"))
+                        materials_rows.append(
+                            self._serialize_detail_row(
+                                d, mat_map[item_code], "material"
+                            )
+                        )
                     elif item_code in srv_map:
-                        services_rows.append(self._serialize_detail_row(d, srv_map[item_code], "service"))
+                        services_rows.append(
+                            self._serialize_detail_row(d, srv_map[item_code], "service")
+                        )
 
             subtotals_products = self._sum_rows(products_rows)
             subtotals_materials = self._sum_rows(materials_rows)
             subtotals_services = self._sum_rows(services_rows)
 
             totals = {
-                "count": subtotals_products["count"] + subtotals_materials["count"] + subtotals_services["count"],
-                "sub_total_net": subtotals_products["sub_total_net"] + subtotals_materials["sub_total_net"] + subtotals_services["sub_total_net"],
-                "sub_total_gross": subtotals_products["sub_total_gross"] + subtotals_materials["sub_total_gross"] + subtotals_services["sub_total_gross"],
-                "sub_total_iva": subtotals_products["sub_total_iva"] + subtotals_materials["sub_total_iva"] + subtotals_services["sub_total_iva"],
+                "count": subtotals_products["count"]
+                + subtotals_materials["count"]
+                + subtotals_services["count"],
+                "sub_total_net": subtotals_products["sub_total_net"]
+                + subtotals_materials["sub_total_net"]
+                + subtotals_services["sub_total_net"],
+                "sub_total_gross": subtotals_products["sub_total_gross"]
+                + subtotals_materials["sub_total_gross"]
+                + subtotals_services["sub_total_gross"],
+                "sub_total_iva": subtotals_products["sub_total_iva"]
+                + subtotals_materials["sub_total_iva"]
+                + subtotals_services["sub_total_iva"],
             }
 
             linking = {
@@ -782,14 +848,29 @@ class CatalogViewSet(viewsets.ModelViewSet):
                     "base_net_amount": getattr(price_obj, "base_net_amount", None),
                 },
                 "totals": totals,
-                "products": {"links": products_rows, "subtotals": subtotals_products, "searchBaseUrl": "/products/?search="},
-                "materials": {"links": materials_rows, "subtotals": subtotals_materials, "searchBaseUrl": "/materials/?search="},
-                "services": {"links": services_rows, "subtotals": subtotals_services, "searchBaseUrl": "/services/?search="},
+                "products": {
+                    "links": products_rows,
+                    "subtotals": subtotals_products,
+                    "searchBaseUrl": "/products/?search=",
+                },
+                "materials": {
+                    "links": materials_rows,
+                    "subtotals": subtotals_materials,
+                    "searchBaseUrl": "/materials/?search=",
+                },
+                "services": {
+                    "links": services_rows,
+                    "subtotals": subtotals_services,
+                    "searchBaseUrl": "/services/?search=",
+                },
             }
 
             return Response(
                 {
-                    "informativa": {"data": informativa_data, "verbose_names": informativa_verbose},
+                    "informativa": {
+                        "data": informativa_data,
+                        "verbose_names": informativa_verbose,
+                    },
                     "calculation": {"props": calculation_props},
                     "linking": linking,
                 },
@@ -945,27 +1026,43 @@ class ProductViewSet(viewsets.ModelViewSet):
 
         return super().partial_update(request, *args, **kwargs)
 
+    def get_queryset(self):
+        qs = Product.objects.select_related(
+            "provider",
+            "type",
+            "item_group",
+            "category",
+            "package",
+            "price",
+            "price__price_configuration",
+        )
+
+        franchise = self.request.query_params.get("franchise")
+
+        if franchise:
+            qs = qs.filter(
+                price__price_configuration__franchise_configuration__franchise=franchise
+            )
+
+        return qs
+
     @action(detail=False, methods=["get"], url_path="list")
     def product_list(self, request):
         try:
             from price.models import PriceConfiguration
 
-            products = Product.objects.all()
+            products = self.get_queryset()
 
             if request.query_params.get("active_only") == "true":
                 products = products.filter(is_active=True, is_deleted=False)
 
             results = []
             for product in products:
-                current_price = Price.objects.filter(
-                    code=product.price, is_current=True
-                ).first()
-
-                price_config = None
-                if current_price:
-                    price_config = PriceConfiguration.objects.filter(
-                        code=current_price.price_configuration
-                    ).first()
+                current_price = (
+                    product.price
+                    if product.price and product.price.is_current
+                    else None
+                )
 
                 results.append(
                     {
@@ -993,22 +1090,19 @@ class ProductViewSet(viewsets.ModelViewSet):
                             if current_price and current_price.price_configuration
                             else None
                         ),
-                        "price_configuration_label": (
-                            price_config.price_configuration if price_config else None
-                        ),
                         "obs": product.obs,
                         "package_unit": product.package_unit,
                         "min_package_purchase": product.min_package_purchase,
                         "provider": product.provider,
                         "type": product.type,
-                        "type_name": None,
+                        "type_name": product.type.type if product.type else None,
                         "item_group": product.item_group,
-                        "group_name": None,
+                        "group_name": product.item_group.group_name if product.item_group else None,
                         "category": product.category,
-                        "category_name": None,
+                        "category_name": product.category.category if product.category else None,
                         "url": product.url,
                         "package": product.package,
-                        "package_description": None,
+                        "package_description": product.package.description if product.package else None,
                         "is_active": product.is_active,
                         "is_deleted": product.is_deleted,
                         "is_confirmed": product.is_confirmed,

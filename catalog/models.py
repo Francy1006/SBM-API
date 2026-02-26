@@ -1,8 +1,6 @@
 from django.db import models
 import uuid
-from inventory.models import Package
-
-
+from inventory.models import Package, Provider
 
 # =========================
 # CATALOG
@@ -113,7 +111,6 @@ class Catalog(models.Model):
 # PRODUCT
 # =========================
 
-
 class Product(models.Model):
     id = models.AutoField(primary_key=True)
     code = models.CharField(max_length=36, unique=True)
@@ -122,24 +119,66 @@ class Product(models.Model):
     obs = models.TextField()
     package_unit = models.IntegerField()
     min_package_purchase = models.IntegerField()
-    price = models.CharField(max_length=36)
-    provider = models.IntegerField()
-    type = models.IntegerField()
-    item_group = models.IntegerField(db_column="item_group")
-    category = models.IntegerField()
+
+    price = models.ForeignKey(
+        "price.Price",
+        db_column="price",
+        to_field="code",
+        on_delete=models.PROTECT,
+        related_name="products",
+    )
+
+    provider = models.ForeignKey(
+        Provider,
+        db_column="provider",
+        on_delete=models.PROTECT,
+        related_name="products",
+    )
+
+    type = models.ForeignKey(
+        "ItemType",
+        db_column="type",
+        on_delete=models.PROTECT,
+        related_name="products",
+    )
+
+    item_group = models.ForeignKey(
+        "ItemGroup",
+        db_column="item_group",
+        on_delete=models.PROTECT,
+        related_name="products",
+    )
+
+    category = models.ForeignKey(
+        "ItemCategory",
+        db_column="category",
+        on_delete=models.PROTECT,
+        related_name="products",
+    )
+
+    package = models.ForeignKey(
+        Package,
+        db_column="package",
+        on_delete=models.PROTECT,
+        related_name="products",
+    )
+
     url = models.CharField(max_length=255, null=True, blank=True)
-    package = models.IntegerField()
+
     is_active = models.BooleanField(default=True)
     is_deleted = models.BooleanField(null=True, blank=True)
     is_confirmed = models.BooleanField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(null=True, blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
+
     created_by = models.CharField(max_length=36)
     confirmed_by = models.CharField(max_length=36, null=True, blank=True)
     updated_by = models.CharField(max_length=36, null=True, blank=True)
     deleted_by = models.CharField(max_length=36, null=True, blank=True)
+
     log = models.TextField(default="init;")
     version = models.IntegerField(default=1)
 
@@ -167,7 +206,7 @@ class Material(models.Model):
     price = models.CharField(max_length=36)
     provider = models.IntegerField()
     type = models.IntegerField()
-    item_group = models.IntegerField(db_column='item_group')
+    item_group = models.IntegerField(db_column="item_group")
     category = models.IntegerField()
     url = models.CharField(max_length=255, null=True, blank=True)
     package = models.IntegerField()
@@ -199,7 +238,7 @@ class Service(models.Model):
     price = models.CharField(max_length=36)
     provider = models.IntegerField()
     type = models.IntegerField()
-    item_group = models.IntegerField(db_column='item_group')
+    item_group = models.IntegerField(db_column="item_group")
     category = models.IntegerField()
     url = models.CharField(max_length=255, null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -334,12 +373,12 @@ class ItemConfiguration(models.Model):
 class ItemConfigurationDetail(models.Model):
     code = models.CharField(max_length=36)
     detail = models.CharField(max_length=50)
-    type = models.ForeignKey('ItemType', db_column='type', on_delete=models.CASCADE)
+    type = models.ForeignKey("ItemType", db_column="type", on_delete=models.CASCADE)
     configuration = models.ForeignKey(
-        'ItemConfiguration',
-        db_column='configuration',
-        to_field='code',
-        on_delete=models.CASCADE
+        "ItemConfiguration",
+        db_column="configuration",
+        to_field="code",
+        on_delete=models.CASCADE,
     )
     id_item = models.CharField(max_length=36)
     quantity = models.IntegerField(default=1)  # NUEVA COLUMNA REAL EN DB
@@ -347,6 +386,5 @@ class ItemConfigurationDetail(models.Model):
     created_by = models.CharField(max_length=36)
 
     class Meta:
-        db_table = 'item_configuration_detail'
+        db_table = "item_configuration_detail"
         managed = False
-

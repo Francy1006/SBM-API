@@ -253,83 +253,118 @@ class CatalogSerializer(serializers.ModelSerializer):
 
 
 class ProductSerializer(serializers.ModelSerializer):
+
     field_verbose_names = serializers.SerializerMethodField()
-    net_amount = serializers.SerializerMethodField()
+
+    # 🔹 Nombres relacionados
+    type_name = serializers.SerializerMethodField()
+    item_group_name = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    provider_name = serializers.SerializerMethodField()
+    package_description = serializers.SerializerMethodField()
+
+    # 🔹 Price info
+    base_net_amount = serializers.IntegerField(
+        source="price.base_net_amount", read_only=True
+    )
+    net_amount = serializers.IntegerField(
+        source="price.net_amount", read_only=True
+    )
+    gross_amount = serializers.IntegerField(
+        source="price.gross_amount", read_only=True
+    )
+    iva_amount = serializers.IntegerField(
+        source="price.iva_amount", read_only=True
+    )
+    aditional_tax_amount = serializers.IntegerField(
+        source="price.aditional_tax_amount", read_only=True
+    )
+    retention_amount = serializers.IntegerField(
+        source="price.retention_amount", read_only=True
+    )
+    price_configuration = serializers.CharField(
+        source="price.price_configuration.code", read_only=True
+    )
+
     price_data = serializers.DictField(write_only=True, required=True)
+
+    # ==============================
+    # GETTERS NOMBRES
+    # ==============================
+
+    def get_type_name(self, obj):
+        return obj.type.type if obj.type else None
+
+    def get_item_group_name(self, obj):
+        return obj.item_group.group_name if obj.item_group else None
+
+    def get_category_name(self, obj):
+        return obj.category.category if obj.category else None
+
+    def get_provider_name(self, obj):
+        return obj.provider.provider if obj.provider else None
+
+    def get_package_description(self, obj):
+        return obj.package.description if obj.package else None
+
+    # ==============================
+    # VERBOSE
+    # ==============================
 
     def get_field_verbose_names(self, obj):
         field_names = [
-            "id",
-            "code",
-            "sku",
-            "description",
-            "obs",
-            "package_unit",
-            "min_package_purchase",
-            "price",
-            "provider",
-            "type",
-            "item_group",
-            "category",
-            "url",
-            "package",
-            "is_active",
-            "is_deleted",
-            "is_confirmed",
-            "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
-            "created_by",
-            "confirmed_by",
-            "updated_by",
-            "deleted_by",
-            "log",
-            "version",
-            "net_amount",
+            "id","code","sku","description","obs","package_unit",
+            "min_package_purchase","price","provider","type",
+            "item_group","category","url","package",
+            "is_active","is_deleted","is_confirmed",
+            "created_at","updated_at","confirmed_at","deleted_at",
+            "created_by","confirmed_by","updated_by","deleted_by",
+            "log","version",
         ]
-        verbose = {"net_amount": "Valor BASE NETO"}
         return {
             field: (
-                verbose[field]
-                if field in verbose
-                else (
-                    obj._meta.get_field(field).verbose_name
-                    if hasattr(obj._meta, "get_field")
-                    and field in [f.name for f in obj._meta.fields]
-                    else field
-                )
+                obj._meta.get_field(field).verbose_name
+                if field in [f.name for f in obj._meta.fields]
+                else field
             )
             for field in field_names
         }
 
-    def get_net_amount(self, obj):
-        try:
-            price_obj = Price._default_manager.get(code=obj.price)
-            return price_obj.net_amount
-        except Exception:
-            return None
+    # ==============================
+    # CREATE
+    # ==============================
 
     def create(self, validated_data):
         request = self.context.get("request", None)
         price_data = validated_data.pop("price_data", None)
+
         if not price_data:
             raise serializers.ValidationError(
                 {"price_data": "Este campo es requerido."}
             )
 
-        allowed_fields = {"base_net_amount", "price_configuration"}
-        if set(price_data.keys()) != allowed_fields:
+        base_net = price_data.get("base_net_amount")
+        price_conf_value = price_data.get("price_configuration")
+
+        if base_net in [None, ""] or price_conf_value in [None, ""]:
             raise serializers.ValidationError(
-                {"price_data": f"Solo se permiten los campos: {allowed_fields}."}
+                {"price_data": "Datos incompletos."}
             )
-        if price_data.get("base_net_amount") in [None, ""]:
+
+        from price.models import PriceConfiguration
+
+        price_conf_obj = PriceConfiguration.objects.filter(
+            code=str(price_conf_value).strip()
+        ).first()
+
+        if not price_conf_obj:
+            price_conf_obj = PriceConfiguration.objects.filter(
+                price_configuration=str(price_conf_value).strip()
+            ).first()
+
+        if not price_conf_obj:
             raise serializers.ValidationError(
-                {"price_data": {"base_net_amount": "Este campo es obligatorio."}}
-            )
-        if price_data.get("price_configuration") in [None, ""]:
-            raise serializers.ValidationError(
-                {"price_data": {"price_configuration": "Este campo es obligatorio."}}
+                {"price_configuration": "No existe PriceConfiguration válido."}
             )
 
         validated_data.pop("price", None)
@@ -341,7 +376,9 @@ class ProductSerializer(serializers.ModelSerializer):
         import uuid
 
         with transaction.atomic():
+
             product_code = str(uuid.uuid4())
+
             product = Product._default_manager.create(
                 **validated_data,
                 code=product_code,
@@ -350,19 +387,22 @@ class ProductSerializer(serializers.ModelSerializer):
             )
 
             price_code = str(uuid.uuid4())
+
             price_obj = Price._default_manager.create(
                 code=price_code,
-                base_net_amount=price_data["base_net_amount"],
+                base_net_amount=base_net,
                 gross_amount=0,
                 iva_amount=0,
                 retention_amount=0,
-                price_configuration=price_data["price_configuration"],
-                created_by=user_code,
-                created_at=now,
+                price_configuration=price_conf_obj,
                 record_item_code=product_code,
                 price_record_type=1,
+                is_current=True,
+                created_by=user_code,
+                created_at=now,
             )
-            product.price = price_obj.code
+
+            product.price = price_obj
             product.save()
 
         return product
@@ -370,48 +410,29 @@ class ProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = Product
         fields = [
-            "id",
-            "code",
-            "sku",
-            "description",
-            "obs",
-            "package_unit",
-            "min_package_purchase",
-            "provider",
-            "type",
-            "item_group",
-            "category",
-            "url",
-            "package",
-            "is_active",
-            "is_deleted",
-            "is_confirmed",
-            "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
-            "created_by",
-            "confirmed_by",
-            "updated_by",
-            "deleted_by",
-            "log",
-            "version",
-            "net_amount",
+            "id","code","sku","description","obs",
+            "package_unit","min_package_purchase",
+            "provider","provider_name",
+            "type","type_name",
+            "item_group","item_group_name",
+            "category","category_name",
+            "url","package","package_description",
+            "is_active","is_deleted","is_confirmed",
+            "created_at","updated_at","confirmed_at","deleted_at",
+            "created_by","confirmed_by","updated_by","deleted_by",
+            "log","version",
+            "base_net_amount","net_amount","gross_amount",
+            "iva_amount","aditional_tax_amount","retention_amount",
+            "price_configuration",
             "field_verbose_names",
-            "price_data",
-            "price",
+            "price_data","price",
         ]
+
         read_only_fields = [
-            "id",
-            "code",
-            "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
-            "created_by",
-            "confirmed_by",
-            "updated_by",
-            "deleted_by",
+            "id","code","created_at","updated_at",
+            "confirmed_at","deleted_at",
+            "created_by","confirmed_by",
+            "updated_by","deleted_by",
             "price",
         ]
 
