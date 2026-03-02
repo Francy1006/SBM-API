@@ -103,7 +103,7 @@ class PriceFormulaView(APIView):
 class PriceConfigurationFormulaView(APIView):
     def get(self, request):
         code = request.query_params.get("code")
-        if not code:
+        if not code or code in ["null", "None", "undefined"]:
             return Response({"error": "El parámetro code es requerido."}, status=400)
 
         price_config = PriceConfiguration.objects.select_related("variable_formula").filter(
@@ -127,54 +127,31 @@ class PriceConfigurationFormulaView(APIView):
 class PriceCalculationFormulaView(APIView):
     permission_classes = [IsAuthenticatedOrReadOnly]
 
-    def post(self, request):
+    def evaluate_formula(self, price_configuration_code, base_net_amount, variables=None):
 
-        price_configuration = request.data.get("price_configuration")
-        base_net_amount = request.data.get("base_net_amount")
-        variables = request.data.get("variables", {})
-
-        if not price_configuration:
-            return Response({"error": "price_configuration es requerido."}, status=400)
-
-        if base_net_amount is None:
-            return Response({"error": "base_net_amount es requerido."}, status=400)
-
-        try:
-            base_net_amount = float(base_net_amount)
-        except:
-            return Response({"error": "base_net_amount inválido."}, status=400)
+        from accounting.models import FiscalDirective
 
         price_config = (
             PriceConfiguration.objects
             .select_related("variable_formula")
-            .filter(code=price_configuration)
+            .filter(code=price_configuration_code)
             .first()
         )
 
         if not price_config:
-            return Response({"error": "Configuración no encontrada."}, status=404)
+            raise ValueError("Configuración no encontrada.")
 
         vf = price_config.variable_formula
         if not vf or not vf.formula_template:
-            return Response({"error": "Fórmula no encontrada."}, status=400)
+            raise ValueError("Fórmula no encontrada.")
 
-        formula_template = vf.formula_template
-
-        # =====================================================
-        # 🔵 CONTEXTO BASE
-        # =====================================================
         context = {
-            "base_net_amount": base_net_amount
+            "base_net_amount": float(base_net_amount)
         }
 
-        # =====================================================
-        # 🔵 VARIABLES FISCALES (IVA, ETC.)
-        # =====================================================
         fiscal_details = FiscalConfigurationDetail.objects.filter(
-            price_configuration=price_configuration
+            price_configuration=price_configuration_code
         )
-
-        from accounting.models import FiscalDirective
 
         directive_codes = fiscal_details.values_list("fiscal_directive", flat=True)
         directives = FiscalDirective.objects.filter(code__in=directive_codes)
@@ -188,9 +165,6 @@ class PriceCalculationFormulaView(APIView):
                 except:
                     context[detail.var] = 0.0
 
-        # =====================================================
-        # 🔴 VARIABLES EXTRA DESDE FRONT
-        # =====================================================
         if isinstance(variables, dict):
             for k, v in variables.items():
                 try:
@@ -198,16 +172,12 @@ class PriceCalculationFormulaView(APIView):
                 except:
                     context[k] = 0.0
 
-        # =====================================================
-        # 🧮 EVALUADOR COMPATIBLE CON Label:format=expr;
-        # =====================================================
         results = {}
 
-        clean_formula = str(formula_template).replace("|", "")
+        clean_formula = str(vf.formula_template).replace("|", "")
         lines = [l.strip() for l in clean_formula.split(";") if l.strip()]
 
         for line in lines:
-
             if "=" not in line:
                 continue
 
@@ -215,29 +185,40 @@ class PriceCalculationFormulaView(APIView):
             raw_label = raw_label.strip()
             expr = expr.strip()
 
-            # Separar label y formato
             if ":" in raw_label:
-                label, _format = raw_label.split(":", 1)
+                label, _ = raw_label.split(":", 1)
                 label = label.strip()
             else:
                 label = raw_label
 
-            # Reemplazar ${variables}
             for var, value in context.items():
                 expr = expr.replace(f"${{{var}}}", str(value))
 
-            try:
-                value = eval(expr, {"__builtins__": {}})
-            except Exception as e:
-                return Response(
-                    {
-                        "error": f"Error evaluando {label}: {e}",
-                        "expr": expr
-                    },
-                    status=400,
-                )
-
+            value = eval(expr, {"__builtins__": None}, {})
             results[label] = round(float(value), 2)
+
+        return results
+
+    def post(self, request):
+
+        price_configuration = request.data.get("price_configuration")
+        base_net_amount = request.data.get("base_net_amount")
+        variables = request.data.get("variables", {})
+
+        if not price_configuration:
+            return Response({"error": "price_configuration es requerido."}, status=400)
+
+        if base_net_amount is None:
+            return Response({"error": "base_net_amount es requerido."}, status=400)
+
+        try:
+            results = self.evaluate_formula(
+                price_configuration,
+                base_net_amount,
+                variables
+            )
+        except Exception as e:
+            return Response({"error": str(e)}, status=400)
 
         return Response(results)
 
@@ -270,3 +251,20 @@ class VariableFormulaView(APIView):
                 )
 
         return Response(data)
+
+class ProductPriceHistoryView(APIView):
+
+    def get(self, request, sku):
+
+        product = Product.objects.filter(sku=sku).first()
+        if not product:
+            return Response({"detail": "Producto no encontrado."}, status=404)
+
+        prices = (
+            Price.objects
+            .filter(products=product)
+            .order_by("created_at")
+            .values("created_at", "base_net_amount")
+        )
+
+        return Response(list(prices))

@@ -40,6 +40,20 @@ class CatalogSerializer(serializers.ModelSerializer):
         source="price.base_net_amount", read_only=True
     )
 
+    net_amount = serializers.IntegerField(source="price.net_amount", read_only=True)
+
+    gross_amount = serializers.IntegerField(source="price.gross_amount", read_only=True)
+
+    iva_amount = serializers.IntegerField(source="price.iva_amount", read_only=True)
+
+    aditional_tax_amount = serializers.IntegerField(
+        source="price.aditional_tax_amount", read_only=True
+    )
+
+    retention_amount = serializers.IntegerField(
+        source="price.retention_amount", read_only=True
+    )
+
     price_configuration = serializers.CharField(
         source="price.price_configuration.code", read_only=True
     )
@@ -71,10 +85,22 @@ class CatalogSerializer(serializers.ModelSerializer):
 
     def get_field_verbose_names(self, obj):
         field_names = [
-            "code","sku","menu","name","description","item_group","category",
-            "type","chef_recommendation","min_quantity_purchase",
-            "rations_quantity","cover_image","is_visible",
-            "is_deleted","is_confirmed","restriction",
+            "code",
+            "sku",
+            "menu",
+            "name",
+            "description",
+            "item_group",
+            "category",
+            "type",
+            "chef_recommendation",
+            "min_quantity_purchase",
+            "rations_quantity",
+            "cover_image",
+            "is_visible",
+            "is_deleted",
+            "is_confirmed",
+            "restriction",
         ]
         return {field: obj._meta.get_field(field).verbose_name for field in field_names}
 
@@ -118,20 +144,40 @@ class CatalogSerializer(serializers.ModelSerializer):
 
             price = Price.objects.create(
                 base_net_amount=base_net,
-                gross_amount=0,
-                iva_amount=0,
-                retention_amount=0,
                 price_configuration=price_conf_obj,
                 is_current=True,
                 created_by=user_code,
                 created_at=now,
             )
 
+            # 🔥 Cálculo SOLO para Catalog
+            formula_obj = price_conf_obj.variable_formula
+            formula = formula_obj.formula_translate
+
+            context = {
+                "base_net_amount": price.base_net_amount,
+            }
+
+            try:
+                result = eval(formula, {}, context)
+
+                price.net_amount = int(result.get("net_amount", 0))
+                price.iva_amount = int(result.get("iva_amount", 0))
+                price.gross_amount = int(result.get("gross_amount", 0))
+                price.aditional_tax_amount = int(result.get("aditional_tax_amount", 0))
+                price.retention_amount = int(result.get("retention_amount", 0))
+
+            except Exception:
+                price.net_amount = 0
+                price.iva_amount = 0
+                price.gross_amount = 0
+                price.aditional_tax_amount = 0
+                price.retention_amount = 0
+
+            price.save()
+
             catalog = Catalog.objects.create(
-                price=price,
-                created_by=user_code,
-                created_at=now,
-                **validated_data
+                price=price, created_by=user_code, created_at=now, **validated_data
             )
 
         return catalog
@@ -165,9 +211,8 @@ class CatalogSerializer(serializers.ModelSerializer):
                         {"price": "El catálogo no tiene Price asociado."}
                     )
 
-                if (
-                    base_net is not None
-                    and int(base_net) != int(current_price.base_net_amount)
+                if base_net is not None and int(base_net) != int(
+                    current_price.base_net_amount
                 ):
 
                     current_price.is_current = False
@@ -188,16 +233,15 @@ class CatalogSerializer(serializers.ModelSerializer):
 
                         if not price_conf_obj:
                             raise serializers.ValidationError(
-                                {"price_configuration": "No existe PriceConfiguration válido."}
+                                {
+                                    "price_configuration": "No existe PriceConfiguration válido."
+                                }
                             )
                     else:
                         price_conf_obj = current_price.price_configuration
 
                     new_price = Price.objects.create(
                         base_net_amount=base_net,
-                        gross_amount=0,
-                        iva_amount=0,
-                        retention_amount=0,
                         price_configuration=price_conf_obj,
                         record_item_code=instance.code,
                         price_record_type=1,
@@ -205,6 +249,32 @@ class CatalogSerializer(serializers.ModelSerializer):
                         created_by=user_code,
                         created_at=now,
                     )
+
+                    # 🔥 Cálculo SOLO para Catalog
+                    formula_obj = price_conf_obj.variable_formula
+                    formula = formula_obj.formula_translate
+
+                    context = {
+                        "base_net_amount": new_price.base_net_amount,
+                    }
+
+                    try:
+                        result = eval(formula, {}, context)
+
+                        new_price.net_amount = int(result.get("net_amount", 0))
+                        new_price.iva_amount = int(result.get("iva_amount", 0))
+                        new_price.gross_amount = int(result.get("gross_amount", 0))
+                        new_price.aditional_tax_amount = int(result.get("aditional_tax_amount", 0))
+                        new_price.retention_amount = int(result.get("retention_amount", 0))
+
+                    except Exception:
+                        new_price.net_amount = 0
+                        new_price.iva_amount = 0
+                        new_price.gross_amount = 0
+                        new_price.aditional_tax_amount = 0
+                        new_price.retention_amount = 0
+
+                    new_price.save()
 
                     instance.price = new_price
 
@@ -235,20 +305,58 @@ class CatalogSerializer(serializers.ModelSerializer):
     class Meta:
         model = Catalog
         fields = [
-            "code","sku","cover_image","menu","menu_name","name","description",
-            "item_group","item_group_name","category","category_name",
-            "type","type_name","chef_recommendation","usage_instructions",
-            "usage_instructions_name","min_quantity_purchase",
-            "rations_quantity","is_visible","is_deleted","is_confirmed",
-            "restriction","restriction_name","configuration",
-            "configuration_name","field_verbose_names","price_data",
-            "price","base_net_amount","price_configuration",
+            "code",
+            "sku",
+            "cover_image",
+            "menu",
+            "menu_name",
+            "name",
+            "description",
+            "item_group",
+            "item_group_name",
+            "category",
+            "category_name",
+            "type",
+            "type_name",
+            "chef_recommendation",
+            "usage_instructions",
+            "usage_instructions_name",
+            "min_quantity_purchase",
+            "rations_quantity",
+            "is_visible",
+            "is_deleted",
+            "is_confirmed",
+            "restriction",
+            "restriction_name",
+            "configuration",
+            "configuration_name",
+            "field_verbose_names",
+            "price_data",
+            "price",
+            "base_net_amount",
+            "price_configuration",
+            "net_amount",
+            "gross_amount",
+            "iva_amount",
+            "aditional_tax_amount",
+            "retention_amount",
         ]
 
         read_only_fields = [
-            "code","created_at","updated_at","deleted_at",
-            "created_by","confirmed_by","updated_by",
-            "deleted_by","price",
+            "code",
+            "created_at",
+            "updated_at",
+            "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "price",
+            "net_amount",
+            "gross_amount",
+            "iva_amount",
+            "aditional_tax_amount",
+            "retention_amount",
         ]
 
 
@@ -267,15 +375,9 @@ class ProductSerializer(serializers.ModelSerializer):
     base_net_amount = serializers.IntegerField(
         source="price.base_net_amount", read_only=True
     )
-    net_amount = serializers.IntegerField(
-        source="price.net_amount", read_only=True
-    )
-    gross_amount = serializers.IntegerField(
-        source="price.gross_amount", read_only=True
-    )
-    iva_amount = serializers.IntegerField(
-        source="price.iva_amount", read_only=True
-    )
+    net_amount = serializers.IntegerField(source="price.net_amount", read_only=True)
+    gross_amount = serializers.IntegerField(source="price.gross_amount", read_only=True)
+    iva_amount = serializers.IntegerField(source="price.iva_amount", read_only=True)
     aditional_tax_amount = serializers.IntegerField(
         source="price.aditional_tax_amount", read_only=True
     )
@@ -313,13 +415,33 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def get_field_verbose_names(self, obj):
         field_names = [
-            "id","code","sku","description","obs","package_unit",
-            "min_package_purchase","price","provider","type",
-            "item_group","category","url","package",
-            "is_active","is_deleted","is_confirmed",
-            "created_at","updated_at","confirmed_at","deleted_at",
-            "created_by","confirmed_by","updated_by","deleted_by",
-            "log","version",
+            "id",
+            "code",
+            "sku",
+            "description",
+            "obs",
+            "package_unit",
+            "min_package_purchase",
+            "price",
+            "provider",
+            "type",
+            "item_group",
+            "category",
+            "url",
+            "package",
+            "is_active",
+            "is_deleted",
+            "is_confirmed",
+            "created_at",
+            "updated_at",
+            "confirmed_at",
+            "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "log",
+            "version",
         ]
         return {
             field: (
@@ -347,9 +469,7 @@ class ProductSerializer(serializers.ModelSerializer):
         price_conf_value = price_data.get("price_configuration")
 
         if base_net in [None, ""] or price_conf_value in [None, ""]:
-            raise serializers.ValidationError(
-                {"price_data": "Datos incompletos."}
-            )
+            raise serializers.ValidationError({"price_data": "Datos incompletos."})
 
         from price.models import PriceConfiguration
 
@@ -377,6 +497,7 @@ class ProductSerializer(serializers.ModelSerializer):
 
         with transaction.atomic():
 
+            # 🔹 Crear producto
             product_code = str(uuid.uuid4())
 
             product = Product._default_manager.create(
@@ -386,13 +507,16 @@ class ProductSerializer(serializers.ModelSerializer):
                 created_at=now,
             )
 
+            # 🔹 Crear price base
             price_code = str(uuid.uuid4())
 
             price_obj = Price._default_manager.create(
                 code=price_code,
                 base_net_amount=base_net,
+                net_amount=0,
                 gross_amount=0,
                 iva_amount=0,
+                aditional_tax_amount=0,
                 retention_amount=0,
                 price_configuration=price_conf_obj,
                 record_item_code=product_code,
@@ -402,37 +526,97 @@ class ProductSerializer(serializers.ModelSerializer):
                 created_at=now,
             )
 
+            # 🔥 CALCULAR FÓRMULA (igual que Catalog)
+            formula_obj = getattr(price_conf_obj, "variable_formula", None)
+
+            if formula_obj and formula_obj.formula_translate:
+                formula = formula_obj.formula_translate
+
+                context = {
+                    "base_net_amount": price_obj.base_net_amount,
+                }
+
+                try:
+                    result = eval(formula, {}, context)
+
+                    price_obj.net_amount = int(result.get("net_amount", 0))
+                    price_obj.iva_amount = int(result.get("iva_amount", 0))
+                    price_obj.gross_amount = int(result.get("gross_amount", 0))
+                    price_obj.aditional_tax_amount = int(result.get("aditional_tax_amount", 0))
+                    price_obj.retention_amount = int(result.get("retention_amount", 0))
+
+                except Exception:
+                    price_obj.net_amount = 0
+                    price_obj.iva_amount = 0
+                    price_obj.gross_amount = 0
+                    price_obj.aditional_tax_amount = 0
+                    price_obj.retention_amount = 0
+
+                price_obj.save()
+
+            # 🔗 Vincular price al producto
             product.price = price_obj
-            product.save()
+            product.save(update_fields=["price"])
 
         return product
 
     class Meta:
         model = Product
         fields = [
-            "id","code","sku","description","base_net_amount","net_amount",
-            "obs","package_unit","min_package_purchase",
-            "provider","provider_name",
-            "type","type_name",
-            "item_group","item_group_name",
-            "category","category_name",
-            "url","package","package_description",
-            "is_active","is_deleted","is_confirmed",
-            "created_at","updated_at","confirmed_at","deleted_at",
-            "created_by","confirmed_by","updated_by","deleted_by",
-            "log","version",
+            "id",
+            "code",
+            "sku",
+            "description",
+            "base_net_amount",
+            "net_amount",
+            "obs",
+            "package_unit",
+            "min_package_purchase",
+            "provider",
+            "provider_name",
+            "type",
+            "type_name",
+            "item_group",
+            "item_group_name",
+            "category",
+            "category_name",
+            "url",
+            "package",
+            "package_description",
+            "is_active",
+            "is_deleted",
+            "is_confirmed",
+            "created_at",
+            "updated_at",
+            "confirmed_at",
+            "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "log",
+            "version",
             "gross_amount",
-            "iva_amount","aditional_tax_amount","retention_amount",
+            "iva_amount",
+            "aditional_tax_amount",
+            "retention_amount",
             "price_configuration",
             "field_verbose_names",
-            "price_data","price",
+            "price_data",
+            "price",
         ]
 
         read_only_fields = [
-            "id","code","created_at","updated_at",
-            "confirmed_at","deleted_at",
-            "created_by","confirmed_by",
-            "updated_by","deleted_by",
+            "id",
+            "code",
+            "created_at",
+            "updated_at",
+            "confirmed_at",
+            "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
             "price",
         ]
 
@@ -858,6 +1042,7 @@ class MeasureUnitSerializer(serializers.ModelSerializer):
         model = MeasureUnit
         fields = ["id", "measure_unit", "description"]
         read_only_fields = ["id"]
+
 
 class InstructionTypeSerializer(serializers.ModelSerializer):
     class Meta:

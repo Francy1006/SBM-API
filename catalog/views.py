@@ -1,16 +1,17 @@
+from django.db import models, transaction
+from django.utils import timezone
 from django.shortcuts import render  # noqa: F401
-from django.db import transaction, connection  # noqa: F401
+
 from rest_framework import viewsets, status, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
-from django.db import models
-from catalog.models import ItemConfigurationDetail
-from django.utils import timezone
 
 import uuid
-
+from price.views import PriceCalculationFormulaView
+from price.models import Price, PriceConfiguration
+from catalog.models import ItemConfigurationDetail
 from .models import (
     Catalog,
     Product,
@@ -25,13 +26,6 @@ from .models import (
     InstructionType,
     ItemConfiguration,
 )
-
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from rest_framework import status
-
-from inventory.models import Package, PackageType, TransportType, MeasureUnit
-from price.models import Price
 
 from .serializers import (
     CatalogSerializer,
@@ -55,27 +49,8 @@ from .serializers import (
     CatalogListSerializer,
 )
 
-
-import uuid
-from django.db import transaction
-from rest_framework import status, viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
-
-from inventory.models import Package
+from inventory.models import Package, PackageType, TransportType, MeasureUnit
 from price.models import Price
-
-from .models import (
-    Catalog,
-    Menu,
-    ItemGroup,
-    ItemCategory,
-    ItemType,
-    ItemConfiguration,
-)
-from .serializers import CatalogSerializer
 
 
 class CatalogViewSet(viewsets.ModelViewSet):
@@ -310,6 +285,107 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 status=500,
             )
 
+    # ===============================
+    # HISTORICAL PRICES (CATALOG)
+    # ===============================
+
+    @action(detail=True, methods=["get"], url_path="prices")
+    def prices(self, request, sku=None):
+        catalog = self.get_object()
+
+        prices = (
+            Price.objects.filter(record_item_code=catalog.code)  # 🔥 CLAVE
+            .order_by("created_at")
+            .values(
+                "code",
+                "base_net_amount",
+                "created_at",
+                "is_current",
+            )
+        )
+
+        return Response(list(prices))
+
+    # ===============================
+    # UPDATE WITH VERSIONED PRICE (CATALOG)
+    # ===============================
+
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        price_data = request.data.get("price_data")
+
+        if not price_data:
+            return super().partial_update(request, *args, **kwargs)
+
+        price_obj = instance.price
+
+        if not price_obj:
+            return Response(
+                {"detail": "Precio actual no encontrado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        base_net_amount_new = price_data.get("base_net_amount")
+        price_configuration_new = price_data.get("price_configuration")
+
+        try:
+            base_net_amount_new = int(base_net_amount_new)
+        except Exception:
+            return Response(
+                {"detail": "base_net_amount inválido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        current_pc = (
+            price_obj.price_configuration.code
+            if price_obj.price_configuration
+            else None
+        )
+
+        changed = int(
+            price_obj.base_net_amount
+        ) != base_net_amount_new or current_pc != str(price_configuration_new)
+
+        if not changed:
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+
+        with transaction.atomic():
+
+            price_obj.is_current = False
+            price_obj.save(update_fields=["is_current"])
+
+            price_conf_obj = PriceConfiguration.objects.filter(
+                code=str(price_configuration_new).strip()
+            ).first()
+
+            if not price_conf_obj:
+                return Response(
+                    {"detail": "PriceConfiguration inválido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            new_price = Price.objects.create(
+                base_net_amount=base_net_amount_new,
+                net_amount=base_net_amount_new,
+                gross_amount=price_obj.gross_amount,
+                iva_amount=price_obj.iva_amount,
+                aditional_tax_amount=price_obj.aditional_tax_amount,
+                retention_amount=price_obj.retention_amount,
+                price_configuration=price_conf_obj,
+                record_item_code=instance.code,  # 🔥 importante
+                price_record_type=1,
+                is_current=True,
+                created_by=getattr(request.user, "code", "system"),
+                created_at=timezone.now(),
+            )
+
+            instance.price = new_price
+            instance.save(update_fields=["price"])
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=["get"], url_path=r"adv/(?P<sku>[^/.]+)")
     def adv(self, request, sku=None):
         try:
@@ -479,15 +555,10 @@ class CatalogViewSet(viewsets.ModelViewSet):
         sub_iva = 0.0
 
         for r in rows:
-            q = self._safe_float(r.get("quantity"), 1.0)
-            n = self._safe_float(r.get("net_amount"), 0.0)
-            g = self._safe_float(r.get("gross_amount"), 0.0)
-            i = self._safe_float(r.get("iva_amount"), 0.0)
-
             count += 1
-            sub_net += n * q
-            sub_gross += g * q
-            sub_iva += i * q
+            sub_net += self._safe_float(r.get("net_amount"), 0.0)
+            sub_gross += self._safe_float(r.get("gross_amount"), 0.0)
+            sub_iva += self._safe_float(r.get("iva_amount"), 0.0)
 
         return {
             "count": count,
@@ -497,24 +568,30 @@ class CatalogViewSet(viewsets.ModelViewSet):
         }
 
     def _serialize_detail_row(self, d, obj=None, item_kind=None):
+
+        from accounting.models import FiscalDirective
+        from django.db.models import Q
+
         q = self._safe_float(getattr(d, "quantity", 1), 1.0)
         if q <= 0:
             q = 1.0
 
-        price_obj = None
-        if obj and getattr(obj, "price", None):
-            price_obj = (
-                Price.objects.filter(code=obj.price).order_by("-created_at").first()
-            )
+        price_obj = getattr(obj, "price", None)
 
-        if price_obj:
-            net_u = float(price_obj.net_amount or 0)
-            iva_u = float(price_obj.iva_amount or 0)
-            gross_u = float(price_obj.gross_amount or 0)
-        else:
-            net_u = 0.0
-            iva_u = 0.0
-            gross_u = 0.0
+        unit_net = float(price_obj.base_net_amount or 0) if price_obj else 0.0
+
+        iva_directive = (
+            FiscalDirective.objects
+            .filter(fiscal_directive="IVA")
+            .filter(Q(is_deleted__isnull=True) | Q(is_deleted=False))
+            .order_by("-year")
+            .first()
+        )
+
+        iva_rate = float(iva_directive.value) if iva_directive else 0.0
+
+        unit_iva = unit_net * iva_rate
+        unit_gross = unit_net + unit_iva
 
         return {
             "detail_code": getattr(d, "code", None),
@@ -526,16 +603,19 @@ class CatalogViewSet(viewsets.ModelViewSet):
             "description": getattr(obj, "description", None),
             "obs": getattr(obj, "obs", None),
             "quantity": q,
-            "unit_net": net_u,
-            "unit_iva": iva_u,
-            "unit_gross": gross_u,
-            "net_amount": net_u * q,
-            "iva_amount": iva_u * q,
-            "gross_amount": gross_u * q,
+            "unit_net": unit_net,
+            "unit_iva": unit_iva,
+            "unit_gross": unit_gross,
+            "net_amount": unit_net * q,
+            "iva_amount": unit_iva * q,
+            "gross_amount": unit_gross * q,
         }
 
     @action(detail=True, methods=["get", "post"], url_path="config")
     def config(self, request, sku=None):
+
+        from accounting.models import FiscalDirective
+
         catalog = self.get_queryset().filter(sku=sku).first()
         if not catalog:
             return Response(
@@ -543,345 +623,231 @@ class CatalogViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # ✅ traer Price real + FK lista
+        cfg = getattr(catalog, "configuration", None)
+
+        # ==========================================
+        # 🔥 POST → GUARDAR CONFIGURACIÓN
+        # ==========================================
+        if request.method == "POST":
+
+            if not cfg:
+                return Response(
+                    {"detail": "Configuración no encontrada."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            ItemConfigurationDetail.objects.filter(
+                configuration_id=cfg.code
+            ).delete()
+
+            products = request.data.get("products", [])
+            materials = request.data.get("materials", [])
+            services = request.data.get("services", [])
+
+            def create_details(rows, type_id):
+                for r in rows:
+                    item_sku = r.get("item_sku")
+                    if not item_sku:
+                        continue
+
+                    # 🔥 buscar el objeto real
+                    obj = None
+                    if type_id == 1:
+                        obj = Product.objects.filter(sku=item_sku).first()
+                    elif type_id == 2:
+                        obj = Material.objects.filter(sku=item_sku).first()
+                    elif type_id == 3:
+                        obj = Service.objects.filter(sku=item_sku).first()
+
+                    if not obj:
+                        continue
+
+                    ItemConfigurationDetail.objects.create(
+                        configuration_id=cfg.code,
+                        id_item=obj.code,  # 🔥 guardar UUID real
+                        detail=r.get("detail", ""),
+                        quantity=int(r.get("quantity") or 1),
+                        type_id=type_id,
+                        created_by=getattr(request.user, "code", "system"),
+                    )
+
+            create_details(products, 1)
+            create_details(materials, 2)
+            create_details(services, 3)
+
+            return Response(
+                {"detail": "Configuración actualizada correctamente."},
+                status=status.HTTP_200_OK,
+            )
+
+        # ==========================================
+        # 🟢 GET → DEVOLVER CONFIGURACIÓN
+        # ==========================================
+
         price_obj = (
             Price.objects.filter(code=catalog.price_id, is_current=True)
             .select_related("price_configuration")
             .first()
         )
+
         pc = getattr(price_obj, "price_configuration", None) if price_obj else None
 
-        cfg = getattr(catalog, "configuration", None)
+        from django.db.models import Q
+        from accounting.models import FiscalDirective
 
-        if request.method == "POST":
-            raw_user_code = getattr(getattr(request, "user", None), "code", None)
-            created_by = str(raw_user_code).strip() if raw_user_code is not None else ""
-            if not created_by:
-                return Response(
-                    {"detail": "Usuario inválido para created_by."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            data = request.data or {}
-
-            products_in = data.get("products", None)
-            materials_in = data.get("materials", None)
-            services_in = data.get("services", None)
-            links_in = data.get("links", None)
-
-            links_payload = []
-
-            def add_rows(kind, rows):
-                if not isinstance(rows, list):
-                    return
-                for r in rows:
-                    if not isinstance(r, dict):
-                        continue
-                    links_payload.append(
-                        {
-                            "item_kind": kind,
-                            "item_sku": (r.get("item_sku") or "").strip(),
-                            "item_code": (r.get("item_code") or "").strip(),
-                            "detail": (r.get("detail") or "").strip()[:50],
-                            "quantity": r.get("quantity", 1),
-                            "net_amount": r.get("net_amount"),
-                            "iva_amount": r.get("iva_amount"),
-                            "gross_amount": r.get("gross_amount"),
-                        }
-                    )
-
-            if isinstance(links_in, list):
-                for r in links_in:
-                    if not isinstance(r, dict):
-                        continue
-                    kind = (
-                        (r.get("item_type") or r.get("item_kind") or "").strip().lower()
-                    )
-                    if kind not in ("product", "material", "service"):
-                        continue
-                    add_rows(kind, [r])
-            else:
-                add_rows("product", products_in or [])
-                add_rows("material", materials_in or [])
-                add_rows("service", services_in or [])
-
-            if not cfg or not getattr(cfg, "code", None):
-                return Response(
-                    {"detail": "Catálogo sin ItemConfiguration."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
-
-            with transaction.atomic():
-                now = timezone.now()
-
-                sku_products = [
-                    x["item_sku"]
-                    for x in links_payload
-                    if x["item_kind"] == "product" and x["item_sku"]
-                ]
-                sku_materials = [
-                    x["item_sku"]
-                    for x in links_payload
-                    if x["item_kind"] == "material" and x["item_sku"]
-                ]
-                sku_services = [
-                    x["item_sku"]
-                    for x in links_payload
-                    if x["item_kind"] == "service" and x["item_sku"]
-                ]
-
-                prod_by_sku = {
-                    p.sku: p for p in Product.objects.filter(sku__in=sku_products)
-                }
-                mat_by_sku = {
-                    m.sku: m for m in Material.objects.filter(sku__in=sku_materials)
-                }
-                srv_by_sku = {
-                    s.sku: s for s in Service.objects.filter(sku__in=sku_services)
-                }
-
-                existing = list(
-                    ItemConfigurationDetail.objects.filter(configuration_id=cfg.code)
-                )
-                existing_by_item = {
-                    e.id_item: e for e in existing if getattr(e, "id_item", None)
-                }
-
-                desired = []
-                for r in links_payload:
-                    kind = r["item_kind"]
-                    item_code = (r.get("item_code") or "").strip()
-                    item_sku = (r.get("item_sku") or "").strip()
-
-                    obj = None
-                    if not item_code:
-                        if kind == "product":
-                            obj = prod_by_sku.get(item_sku)
-                        elif kind == "material":
-                            obj = mat_by_sku.get(item_sku)
-                        elif kind == "service":
-                            obj = srv_by_sku.get(item_sku)
-
-                        if not obj:
-                            continue
-                        item_code = getattr(obj, "code", None)
-
-                    if not item_code:
-                        continue
-
-                    if obj is None:
-                        if kind == "product":
-                            obj = Product.objects.filter(code=item_code).first()
-                        elif kind == "material":
-                            obj = Material.objects.filter(code=item_code).first()
-                        elif kind == "service":
-                            obj = Service.objects.filter(code=item_code).first()
-
-                    type_id = getattr(obj, "type", None) if obj else None
-                    if not type_id:
-                        continue
-
-                    desired.append(
-                        {
-                            "item_code": item_code,
-                            "detail": (r.get("detail") or "")[:50],
-                            "type_id": int(type_id),
-                            "quantity": r.get("quantity", 1),
-                        }
-                    )
-
-                desired_codes = {d["item_code"] for d in desired}
-
-                to_delete = [
-                    e.id_item for e in existing if e.id_item not in desired_codes
-                ]
-                if to_delete:
-                    ItemConfigurationDetail.objects.filter(
-                        configuration_id=cfg.code, id_item__in=to_delete
-                    ).delete()
-
-                to_create = []
-                for d in desired:
-                    existing_obj = existing_by_item.get(d["item_code"])
-                    if not existing_obj:
-                        to_create.append(
-                            ItemConfigurationDetail(
-                                code=str(uuid.uuid4()),
-                                detail=d["detail"],
-                                type_id=d["type_id"],
-                                configuration_id=cfg.code,
-                                id_item=d["item_code"],
-                                quantity=d["quantity"],
-                                created_at=now,
-                                created_by=created_by,
-                            )
-                        )
-                    else:
-                        updated = False
-                        if existing_obj.detail != d["detail"]:
-                            existing_obj.detail = d["detail"]
-                            updated = True
-                        if existing_obj.type_id != d["type_id"]:
-                            existing_obj.type_id = d["type_id"]
-                            updated = True
-                        if float(getattr(existing_obj, "quantity", 1) or 1) != float(
-                            d["quantity"] or 1
-                        ):
-                            existing_obj.quantity = d["quantity"]
-                            updated = True
-                        if updated:
-                            existing_obj.save(
-                                update_fields=["detail", "type_id", "quantity"]
-                            )
-
-                if to_create:
-                    ItemConfigurationDetail.objects.bulk_create(to_create)
-
-            return Response(
-                {"detail": "Configuración guardada."}, status=status.HTTP_200_OK
+        iva_directive = (
+            FiscalDirective.objects
+            .filter(
+                fiscal_directive="IVA",
+                is_confirmed=True
             )
+            .filter(Q(is_deleted__isnull=True) | Q(is_deleted=False))
+            .order_by("-year", "-month", "-id")
+            .first()
+        )
 
-        try:
-            # ✅ serializable
-            informativa_data = {
-                "item_configuration_code": getattr(cfg, "code", None),
-                "item_configuration_name": getattr(cfg, "configuration", None),
-                "price_code": getattr(price_obj, "code", None),
-                "price_configuration": getattr(pc, "code", None),
-                "price_configuration_label": getattr(pc, "price_configuration", None),
-                "base_net_amount": getattr(price_obj, "base_net_amount", None),
-                "price_is_current": getattr(price_obj, "is_current", None),
-            }
-
-            informativa_verbose = {
-                "item_configuration_code": "Item Configuration (code)",
-                "item_configuration_name": "Item Configuration (configuration)",
-                "price_code": "Price (code)",
-                "price_configuration": "Price Configuration (code)",
-                "price_configuration_label": "Price Configuration (nombre)",
-                "base_net_amount": "Valor Neto Base",
-                "price_is_current": "Precio Vigente",
-            }
-
-            calculation_props = {
-                "code": getattr(pc, "code", None),
-                "baseNetAmount": getattr(price_obj, "base_net_amount", None),
-                "netAmount": getattr(price_obj, "net_amount", None),
-                "grossAmount": getattr(price_obj, "gross_amount", None),
-                "ivaAmount": getattr(price_obj, "iva_amount", None),
-                "additionalTaxAmount": getattr(price_obj, "aditional_tax_amount", None),
-                "retentionAmount": getattr(price_obj, "retention_amount", None),
-                "selectedProductSku": catalog.sku,
-            }
-
-            products_rows, materials_rows, services_rows = [], [], []
-
-            if cfg and getattr(cfg, "code", None):
-                details = list(
-                    ItemConfigurationDetail.objects.only(
-                        "code",
-                        "detail",
-                        "type_id",
-                        "configuration",
-                        "id_item",
-                        "quantity",
-                        "created_at",
-                        "created_by",
-                    )
-                    .filter(configuration_id=cfg.code)
-                    .order_by("created_at")
-                )
-
-                id_items = [d.id_item for d in details if getattr(d, "id_item", None)]
-                prod_map = {
-                    p.code: p for p in Product.objects.filter(code__in=id_items)
-                }
-                mat_map = {
-                    m.code: m for m in Material.objects.filter(code__in=id_items)
-                }
-                srv_map = {s.code: s for s in Service.objects.filter(code__in=id_items)}
-
-                for d in details:
-                    item_code = getattr(d, "id_item", None)
-                    if not item_code:
-                        continue
-                    if item_code in prod_map:
-                        products_rows.append(
-                            self._serialize_detail_row(
-                                d, prod_map[item_code], "product"
-                            )
-                        )
-                    elif item_code in mat_map:
-                        materials_rows.append(
-                            self._serialize_detail_row(
-                                d, mat_map[item_code], "material"
-                            )
-                        )
-                    elif item_code in srv_map:
-                        services_rows.append(
-                            self._serialize_detail_row(d, srv_map[item_code], "service")
-                        )
-
-            subtotals_products = self._sum_rows(products_rows)
-            subtotals_materials = self._sum_rows(materials_rows)
-            subtotals_services = self._sum_rows(services_rows)
-
-            totals = {
-                "count": subtotals_products["count"]
-                + subtotals_materials["count"]
-                + subtotals_services["count"],
-                "sub_total_net": subtotals_products["sub_total_net"]
-                + subtotals_materials["sub_total_net"]
-                + subtotals_services["sub_total_net"],
-                "sub_total_gross": subtotals_products["sub_total_gross"]
-                + subtotals_materials["sub_total_gross"]
-                + subtotals_services["sub_total_gross"],
-                "sub_total_iva": subtotals_products["sub_total_iva"]
-                + subtotals_materials["sub_total_iva"]
-                + subtotals_services["sub_total_iva"],
-            }
-
-            linking = {
-                "header": {
-                    "item_configuration_code": getattr(cfg, "code", None),
-                    "item_configuration_name": getattr(cfg, "configuration", None),
-                    "base_net_amount": getattr(price_obj, "base_net_amount", None),
-                },
-                "totals": totals,
-                "products": {
-                    "links": products_rows,
-                    "subtotals": subtotals_products,
-                    "searchBaseUrl": "/products/?search=",
-                },
-                "materials": {
-                    "links": materials_rows,
-                    "subtotals": subtotals_materials,
-                    "searchBaseUrl": "/materials/?search=",
-                },
-                "services": {
-                    "links": services_rows,
-                    "subtotals": subtotals_services,
-                    "searchBaseUrl": "/services/?search=",
-                },
-            }
-
+        if not iva_directive:
             return Response(
-                {
-                    "informativa": {
-                        "data": informativa_data,
-                        "verbose_names": informativa_verbose,
-                    },
-                    "calculation": {"props": calculation_props},
-                    "linking": linking,
-                },
-                status=status.HTTP_200_OK,
-            )
-
-        except Exception as e:
-            return Response(
-                {"detail": f"Error obteniendo configuración: {str(e)}"},
+                {"detail": "IVA no encontrado en fiscal_directive."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+        iva_rate = float(iva_directive.value)
+
+        # ------------------------
+        # INFORMATIVE
+        # ------------------------
+        informativa_data = {
+            "item_configuration_code": getattr(cfg, "code", None),
+            "item_configuration_name": getattr(cfg, "configuration", None),
+            "price_code": getattr(price_obj, "code", None),
+            "price_configuration": getattr(pc, "code", None),
+            "price_configuration_label": getattr(pc, "price_configuration", None),
+            "base_net_amount": getattr(price_obj, "base_net_amount", None),
+            "price_is_current": getattr(price_obj, "is_current", None),
+        }
+
+        # ------------------------
+        # LINKING
+        # ------------------------
+        products_rows = []
+        materials_rows = []
+        services_rows = []
+
+        if cfg and getattr(cfg, "code", None):
+
+            details = ItemConfigurationDetail.objects.filter(
+                configuration_id=cfg.code
+            ).order_by("created_at")
+
+            id_items = [d.id_item for d in details if d.id_item]
+
+            prod_map = {
+                p.code: p
+                for p in Product.objects.filter(code__in=id_items)
+                .select_related("price")
+            }
+
+            mat_map = {m.code: m for m in Material.objects.filter(code__in=id_items)}
+            srv_map = {s.code: s for s in Service.objects.filter(code__in=id_items)}
+
+            for d in details:
+                item_code = d.id_item
+                if not item_code:
+                    continue
+
+                if item_code in prod_map:
+                    products_rows.append(
+                        self._serialize_detail_row(d, prod_map[item_code], "product")
+                    )
+                elif item_code in mat_map:
+                    materials_rows.append(
+                        self._serialize_detail_row(d, mat_map[item_code], "material")
+                    )
+                elif item_code in srv_map:
+                    services_rows.append(
+                        self._serialize_detail_row(d, srv_map[item_code], "service")
+                    )
+
+        subtotals_products = self._sum_rows(products_rows)
+        subtotals_materials = self._sum_rows(materials_rows)
+        subtotals_services = self._sum_rows(services_rows)
+
+        totals = {
+            "count": (
+                subtotals_products["count"]
+                + subtotals_materials["count"]
+                + subtotals_services["count"]
+            ),
+            "sub_total_net": (
+                subtotals_products["sub_total_net"]
+                + subtotals_materials["sub_total_net"]
+                + subtotals_services["sub_total_net"]
+            ),
+            "sub_total_gross": (
+                subtotals_products["sub_total_gross"]
+                + subtotals_materials["sub_total_gross"]
+                + subtotals_services["sub_total_gross"]
+            ),
+            "sub_total_iva": (
+                subtotals_products["sub_total_iva"]
+                + subtotals_materials["sub_total_iva"]
+                + subtotals_services["sub_total_iva"]
+            ),
+        }
+
+        # ------------------------
+        # CALCULATION VARIABLES (NO RESULTADOS)
+        # ------------------------
+        calculation_props = {
+            "code": getattr(pc, "code", None),
+            "baseNetAmount": getattr(price_obj, "base_net_amount", None),
+            "iva": iva_rate,
+            "total_neto_productos": subtotals_products["sub_total_net"],
+            "total_neto_materiales": subtotals_materials["sub_total_net"],
+            "total_neto_servicios": subtotals_services["sub_total_net"],
+            "costo_neto": totals["sub_total_net"],
+            "iva_costo": totals["sub_total_iva"],
+        }
+
+        linking = {
+            "header": {
+                "item_configuration_code": getattr(cfg, "code", None),
+                "item_configuration_name": getattr(cfg, "configuration", None),
+                "base_net_amount": getattr(price_obj, "base_net_amount", None),
+            },
+            "totals": totals,
+            "products": {
+                "links": products_rows,
+                "subtotals": subtotals_products,
+                "searchBaseUrl": "/products/?search=",
+            },
+            "materials": {
+                "links": materials_rows,
+                "subtotals": subtotals_materials,
+                "searchBaseUrl": "/materials/?search=",
+            },
+            "services": {
+                "links": services_rows,
+                "subtotals": subtotals_services,
+                "searchBaseUrl": "/services/?search=",
+            },
+        }
+
+        return Response(
+            {
+                "informativa": {
+                    "data": informativa_data,
+                    "verbose_names": {},
+                },
+                "calculation": {
+                    "props": calculation_props
+                },
+                "linking": linking,
+            },
+            status=status.HTTP_200_OK,
+        )
+    
 
 
 class ProductViewSet(viewsets.ModelViewSet):
@@ -903,105 +869,104 @@ class ProductViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id", "description", "created_at", "updated_at"]
     ordering = ["-id"]
 
-    class _SimplePriceSerializer(serializers.ModelSerializer):
-        class Meta:
-            model = Price
-            fields = "__all__"
-
     # ===============================
     # CREATE
     # ===============================
 
     def perform_create(self, serializer):
-        if hasattr(self.request.user, "code"):
-            product = serializer.save(created_by=self.request.user.code)
-        else:
-            product = serializer.save(created_by="system")
-
-        try:
-            from rest_framework.test import APIRequestFactory
-            from price.views import PriceCalculationFormulaView
-
-            factory = APIRequestFactory()
-            calculation_request = factory.post(
-                "/product-price-calculation/",
-                {"sku": product.sku},
-                format="json",
-            )
-
-            if self.request.user.is_authenticated:
-                calculation_request.user = self.request.user
-
-            PriceCalculationFormulaView.as_view()(calculation_request)
-
-        except Exception as e:
-            print(f"Price calculation error: {str(e)}")
+        serializer.save(created_by=getattr(self.request.user, "code", "system"))
 
     # ===============================
     # UPDATE WITH VERSIONED PRICE
     # ===============================
 
     def partial_update(self, request, *args, **kwargs):
-        price_data = request.data.get("price_data")
         instance = self.get_object()
+        price_data = request.data.get("price_data")
 
-        if price_data:
-            try:
-                price_obj = Price.objects.get(code=instance.price)
-            except Price.DoesNotExist:
-                return Response({"detail": "Precio actual no encontrado."}, status=400)
+        # 🔵 Si no viene price_data → update normal
+        if not price_data:
+            return super().partial_update(request, *args, **kwargs)
 
-            base_net_amount_new = price_data.get("base_net_amount")
-            price_configuration_new = price_data.get("price_configuration")
+        price_obj = instance.price
 
-            changed = False
+        if not price_obj:
+            return Response(
+                {"detail": "Precio actual no encontrado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            if str(price_obj.base_net_amount) != str(base_net_amount_new):
-                changed = True
+        base_net_amount_new = price_data.get("base_net_amount")
+        price_configuration_new = price_data.get("price_configuration")
 
-            if str(getattr(price_obj.price_configuration, "code", None)) != str(
-                price_configuration_new
-            ):
-                changed = True
+        try:
+            base_net_amount_new = int(base_net_amount_new)
+        except Exception:
+            return Response(
+                {"detail": "base_net_amount inválido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-            if changed:
-                from price.models import PriceConfiguration
+        current_pc = (
+            price_obj.price_configuration.code
+            if price_obj.price_configuration
+            else None
+        )
 
-                with transaction.atomic():
-                    price_obj.is_current = False
-                    price_obj.save()
+        changed = int(
+            price_obj.base_net_amount
+        ) != base_net_amount_new or current_pc != str(price_configuration_new)
 
-                    price_conf_obj = PriceConfiguration.objects.filter(
-                        code=str(price_configuration_new)
-                    ).first()
+        if not changed:
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
 
-                    if not price_conf_obj:
-                        return Response(
-                            {"detail": "PriceConfiguration inválido."},
-                            status=400,
-                        )
+        with transaction.atomic():
 
-                    price_data_new = self._SimplePriceSerializer(price_obj).data
-                    for k in ["id", "code", "created_at"]:
-                        price_data_new.pop(k, None)
+            # 🔴 Desactivar precio actual
+            price_obj.is_current = False
+            price_obj.save(update_fields=["is_current"])
 
-                    price_data_new["base_net_amount"] = base_net_amount_new
-                    price_data_new["price_configuration"] = price_conf_obj
-                    price_data_new["is_current"] = True
+            # 🔵 Buscar nueva configuración
+            price_conf_obj = PriceConfiguration.objects.filter(
+                code=str(price_configuration_new).strip()
+            ).first()
 
-                    new_price = Price.objects.create(**price_data_new)
+            if not price_conf_obj:
+                return Response(
+                    {"detail": "PriceConfiguration inválido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
-                    instance.price = new_price.code
-                    instance.save()
+            # 🟢 Crear nueva versión
+            new_price = Price.objects.create(
+                base_net_amount=base_net_amount_new,
+                net_amount=base_net_amount_new,
+                gross_amount=price_obj.gross_amount,
+                iva_amount=price_obj.iva_amount,
+                aditional_tax_amount=price_obj.aditional_tax_amount,
+                retention_amount=price_obj.retention_amount,
+                price_configuration=price_conf_obj,
+                record_item_code=instance.code,
+                price_record_type=1,
+                is_current=True,
+                created_by=getattr(request.user, "code", "system"),
+                created_at=timezone.now(),
+            )
 
-        return super().partial_update(request, *args, **kwargs)
+            # 🔗 Vincular nuevo price
+            instance.price = new_price
+            instance.save(update_fields=["price"])
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     # ===============================
-    # QUERYSET
+    # QUERYSET OPTIMIZED
     # ===============================
 
     def get_queryset(self):
-        qs = Product.objects.select_related(
+        return Product.objects.select_related(
             "provider",
             "type",
             "item_group",
@@ -1011,96 +976,184 @@ class ProductViewSet(viewsets.ModelViewSet):
             "price__price_configuration",
         )
 
-        franchise = self.request.query_params.get("franchise")
+    # ===============================
+    # HISTORICAL PRICES
+    # ===============================
 
-        if franchise:
-            qs = qs.filter(
-                price__price_configuration__franchise_configuration__franchise=franchise
+    @action(detail=True, methods=["get"], url_path="prices")
+    def prices(self, request, code=None):
+        product = self.get_object()
+
+        prices = (
+            Price.objects.filter(record_item_code=product.code)
+            .order_by("created_at")
+            .values(
+                "code",
+                "base_net_amount",
+                "created_at",
+                "is_current",  # 🔥 necesario para pintar verde/amarillo
             )
+        )
 
-        return qs
+        return Response(list(prices))
+
+
+class ProductViewSet(viewsets.ModelViewSet):
+    queryset = Product.objects.all()
+    serializer_class = ProductSerializer
+    lookup_field = "code"
+
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = [
+        "is_active",
+        "is_deleted",
+        "is_confirmed",
+        "provider",
+        "type",
+        "item_group",
+        "category",
+    ]
+    search_fields = ["description", "sku", "code", "obs"]
+    ordering_fields = ["id", "description", "created_at", "updated_at"]
+    ordering = ["-id"]
 
     # ===============================
-    # LIST CUSTOM
+    # CREATE
     # ===============================
 
-    @action(detail=False, methods=["get"], url_path="list")
-    def product_list(self, request):
-        try:
-            products = self.get_queryset()
-            results = []
+    def perform_create(self, serializer):
+        serializer.save(created_by=getattr(self.request.user, "code", "system"))
 
-            for product in products:
-                current_price = (
-                    product.price
-                    if product.price and product.price.is_current
-                    else None
-                )
+    # ===============================
+    # UPDATE WITH VERSIONED PRICE
+    # ===============================
 
-                results.append(
-                    {
-                        "code": product.code,
-                        "sku": product.sku,
-                        "description": product.description,
-                        "base_net_amount": getattr(current_price, "base_net_amount", 0),
-                        "net_amount": getattr(current_price, "net_amount", 0),
-                        "gross_amount": getattr(current_price, "gross_amount", 0),
-                        "iva_amount": getattr(current_price, "iva_amount", 0),
-                        "aditional_tax_amount": getattr(
-                            current_price, "aditional_tax_amount", 0
-                        ),
-                        "retention_amount": getattr(
-                            current_price, "retention_amount", 0
-                        ),
-                        "price_configuration_label": (
-                            current_price.price_configuration.price_configuration
-                            if current_price and current_price.price_configuration
-                            else None
-                        ),
-                        "provider": product.provider_id,
-                        "type": product.type_id,
-                        "item_group": product.item_group_id,
-                        "category": product.category_id,
-                        "type_name": product.type.type if product.type else None,
-                        "group_name": (
-                            product.item_group.group_name
-                            if product.item_group
-                            else None
-                        ),
-                        "category_name": (
-                            product.category.category if product.category else None
-                        ),
-                        "url": product.url,
-                        "is_active": product.is_active,
-                        "is_deleted": product.is_deleted,
-                        "is_confirmed": product.is_confirmed,
-                        "created_at": product.created_at,
-                    }
-                )
+    def partial_update(self, request, *args, **kwargs):
+        instance = self.get_object()
+        price_data = request.data.get("price_data")
 
-            return Response({"results": results, "verbose_names": {}})
+        # 🔵 Si no viene price_data → update normal
+        if not price_data:
+            return super().partial_update(request, *args, **kwargs)
 
-        except Exception as e:
+        price_obj = instance.price
+
+        if not price_obj:
             return Response(
-                {"error": f"Error obteniendo lista de productos: {str(e)}"},
-                status=500,
+                {"detail": "Precio actual no encontrado."},
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
+        base_net_amount_new = price_data.get("base_net_amount")
+        price_configuration_new = price_data.get("price_configuration")
+
+        try:
+            base_net_amount_new = int(base_net_amount_new)
+        except Exception:
+            return Response(
+                {"detail": "base_net_amount inválido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        current_pc = (
+            price_obj.price_configuration.code
+            if price_obj.price_configuration
+            else None
+        )
+
+        changed = int(
+            price_obj.base_net_amount
+        ) != base_net_amount_new or current_pc != str(price_configuration_new)
+
+        if not changed:
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+
+        with transaction.atomic():
+
+            # 🔴 Desactivar precio actual
+            price_obj.is_current = False
+            price_obj.save(update_fields=["is_current"])
+
+            # 🔵 Buscar nueva configuración
+            price_conf_obj = PriceConfiguration.objects.filter(
+                code=str(price_configuration_new).strip()
+            ).first()
+
+            if not price_conf_obj:
+                return Response(
+                    {"detail": "PriceConfiguration inválido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # 🟢 Crear nueva versión
+            new_price = Price.objects.create(
+                base_net_amount=base_net_amount_new,
+                net_amount=base_net_amount_new,
+                gross_amount=price_obj.gross_amount,
+                iva_amount=price_obj.iva_amount,
+                aditional_tax_amount=price_obj.aditional_tax_amount,
+                retention_amount=price_obj.retention_amount,
+                price_configuration=price_conf_obj,
+                record_item_code=instance.code,
+                price_record_type=1,
+                is_current=True,
+                created_by=getattr(request.user, "code", "system"),
+                created_at=timezone.now(),
+            )
+
+            # 🔗 Vincular nuevo price
+            instance.price = new_price
+            instance.save(update_fields=["price"])
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
     # ===============================
-    # 🔥 CONFIG FOR PRODUCT
+    # QUERYSET OPTIMIZED
+    # ===============================
+
+    def get_queryset(self):
+        return Product.objects.select_related(
+            "provider",
+            "type",
+            "item_group",
+            "category",
+            "package",
+            "price",
+            "price__price_configuration",
+        )
+
+    # ===============================
+    # HISTORICAL PRICES
+    # ===============================
+
+    @action(detail=True, methods=["get"], url_path="prices")
+    def prices(self, request, code=None):
+        product = self.get_object()
+
+        prices = (
+            Price.objects.filter(record_item_code=product.code)
+            .order_by("created_at")
+            .values(
+                "code",
+                "base_net_amount",
+                "created_at",
+                "is_current",  # 🔥 necesario para pintar verde/amarillo
+            )
+        )
+
+        return Response(list(prices))
+
+    # ===============================
+    # CONFIG VIEW
     # ===============================
 
     @action(detail=True, methods=["get"], url_path="config")
     def config(self, request, code=None):
 
         product = self.get_object()
-
-        price_obj = (
-            Price.objects.filter(code=product.price, is_current=True)
-            .select_related("price_configuration")
-            .first()
-        )
-
+        price_obj = product.price
         pc = getattr(price_obj, "price_configuration", None) if price_obj else None
 
         informativa_data = {
@@ -1113,28 +1166,48 @@ class ProductViewSet(viewsets.ModelViewSet):
             "price_is_current": getattr(price_obj, "is_current", None),
         }
 
-        calculation_props = None
-
-        if pc and getattr(pc, "code", None):
-            calculation_props = {
-                "code": pc.code,
-                "baseNetAmount": getattr(price_obj, "base_net_amount", None),
-                "netAmount": getattr(price_obj, "net_amount", None),
-                "grossAmount": getattr(price_obj, "gross_amount", None),
-                "ivaAmount": getattr(price_obj, "iva_amount", None),
-                "additionalTaxAmount": getattr(price_obj, "aditional_tax_amount", None),
-                "retentionAmount": getattr(price_obj, "retention_amount", None),
-                "selectedProductSku": product.sku,
-            }
+        calculation_props = {
+            "code": getattr(pc, "code", None),
+            "baseNetAmount": getattr(price_obj, "base_net_amount", None),
+            "additionalTaxAmount": getattr(price_obj, "aditional_tax_amount", None),
+            "retentionAmount": getattr(price_obj, "retention_amount", None),
+            "selectedProductSku": product.sku,
+        }
 
         return Response(
             {
-                "informativa": {"data": informativa_data, "verbose_names": {}},
+                "informativa": {
+                    "data": informativa_data,
+                    "verbose_names": {},
+                },
                 "calculation": {"props": calculation_props},
                 "linking": None,
             },
             status=status.HTTP_200_OK,
         )
+
+    # ===============================
+    # LOOKUP
+    # ===============================
+
+    @action(detail=False, methods=["get"], url_path="lookup")
+    def lookup(self, request):
+        q = (request.query_params.get("q") or "").strip()
+
+        if not q:
+            return Response({"results": []})
+
+        qs = Product.objects.filter(
+            models.Q(sku__icontains=q)
+            | models.Q(description__icontains=q)
+            | models.Q(obs__icontains=q)
+        ).order_by("description")[:20]
+
+        results = [
+            {"sku": p.sku, "description": p.description, "obs": p.obs} for p in qs
+        ]
+
+        return Response({"results": results})
 
     # ===============================
     # LOOKUP
@@ -1205,62 +1278,6 @@ class MaterialViewSet(viewsets.ModelViewSet):
 
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-    @action(detail=True, methods=["get", "post"], url_path="config")
-    def config(self, request, code=None):
-
-        product = self.get_queryset().filter(code=code).first()
-        if not product:
-            return Response(
-                {"detail": "Producto no encontrado."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
-        price_obj = (
-            Price.objects.filter(code=product.price, is_current=True)
-            .select_related("price_configuration")
-            .first()
-        )
-
-        pc = getattr(price_obj, "price_configuration", None) if price_obj else None
-
-        cfg = getattr(product, "configuration", None)
-
-        # 🔥 SOLO GET (igual que catálogo)
-        if request.method == "GET":
-
-            informativa_data = {
-                "product_code": product.code,
-                "product_sku": product.sku,
-                "price_code": getattr(price_obj, "code", None),
-                "price_configuration": getattr(pc, "code", None),
-                "price_configuration_label": getattr(pc, "price_configuration", None),
-                "base_net_amount": getattr(price_obj, "base_net_amount", None),
-                "price_is_current": getattr(price_obj, "is_current", None),
-            }
-
-            calculation_props = {
-                "code": getattr(pc, "code", None),
-                "baseNetAmount": getattr(price_obj, "base_net_amount", None),
-                "netAmount": getattr(price_obj, "net_amount", None),
-                "grossAmount": getattr(price_obj, "gross_amount", None),
-                "ivaAmount": getattr(price_obj, "iva_amount", None),
-                "additionalTaxAmount": getattr(price_obj, "aditional_tax_amount", None),
-                "retentionAmount": getattr(price_obj, "retention_amount", None),
-                "selectedProductSku": product.sku,
-            }
-
-            return Response(
-                {
-                    "informativa": {
-                        "data": informativa_data,
-                        "verbose_names": {},
-                    },
-                    "calculation": {"props": calculation_props},
-                    "linking": None,  # 🔥 productos no usan linking tipo catálogo
-                },
-                status=status.HTTP_200_OK,
-            )
 
 
 class ServiceViewSet(viewsets.ModelViewSet):
@@ -1407,74 +1424,6 @@ class ItemConfigurationViewSet(viewsets.ModelViewSet):
             queryset = self.get_queryset().filter(is_deleted=False)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
-
-    @action(detail=False, methods=["get"], url_path="lookup")
-    def lookup(self, request):
-        """
-        GET /materials/lookup/?q=pollo&limit=10
-        Retorna [{sku, description, obs}]
-        """
-        q = (request.query_params.get("q") or "").strip()
-        limit = request.query_params.get("limit") or "10"
-
-        try:
-            limit = int(limit)
-        except Exception:
-            limit = 10
-
-        limit = max(1, min(limit, 50))
-
-        if not q:
-            return Response({"results": []}, status=status.HTTP_200_OK)
-
-        qs = (
-            Material.objects.all()
-            .filter(
-                models.Q(sku__icontains=q)
-                | models.Q(description__icontains=q)
-                | models.Q(obs__icontains=q)
-            )
-            .order_by("description")[:limit]
-        )
-
-        results = [
-            {"sku": m.sku, "description": m.description, "obs": m.obs} for m in qs
-        ]
-        return Response({"results": results}, status=status.HTTP_200_OK)
-
-    @action(detail=False, methods=["get"], url_path="lookup")
-    def lookup(self, request):
-        """
-        GET /services/lookup/?q=pollo&limit=10
-        Retorna [{sku, description, obs}]
-        """
-        q = (request.query_params.get("q") or "").strip()
-        limit = request.query_params.get("limit") or "10"
-
-        try:
-            limit = int(limit)
-        except Exception:
-            limit = 10
-
-        limit = max(1, min(limit, 50))
-
-        if not q:
-            return Response({"results": []}, status=status.HTTP_200_OK)
-
-        qs = (
-            Service.objects.all()
-            .filter(
-                models.Q(sku__icontains=q)
-                | models.Q(description__icontains=q)
-                | models.Q(obs__icontains=q)
-            )
-            .order_by("description")[:limit]
-        )
-
-        results = [
-            {"sku": s.sku, "description": s.description, "obs": s.obs} for s in qs
-        ]
-        return Response({"results": results}, status=status.HTTP_200_OK)
 
 
 class PackageViewSet(viewsets.ModelViewSet):
