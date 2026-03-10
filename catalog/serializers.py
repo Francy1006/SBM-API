@@ -26,7 +26,11 @@ from price.models import Price
 class CatalogSerializer(serializers.ModelSerializer):
 
     field_verbose_names = serializers.SerializerMethodField()
+
     menu_name = serializers.SerializerMethodField()
+    menu_background_color = serializers.CharField(source="menu.background_color", read_only=True)
+    menu_text_color = serializers.CharField(source="menu.text_color", read_only=True)
+
     item_group_name = serializers.SerializerMethodField()
     category_name = serializers.SerializerMethodField()
     type_name = serializers.SerializerMethodField()
@@ -36,14 +40,9 @@ class CatalogSerializer(serializers.ModelSerializer):
 
     price_data = serializers.DictField(write_only=True, required=False)
 
-    base_net_amount = serializers.IntegerField(
-        source="price.base_net_amount", read_only=True
-    )
-
+    base_net_amount = serializers.IntegerField(source="price.base_net_amount", read_only=True)
     net_amount = serializers.IntegerField(source="price.net_amount", read_only=True)
-
     gross_amount = serializers.IntegerField(source="price.gross_amount", read_only=True)
-
     iva_amount = serializers.IntegerField(source="price.iva_amount", read_only=True)
 
     aditional_tax_amount = serializers.IntegerField(
@@ -109,11 +108,13 @@ class CatalogSerializer(serializers.ModelSerializer):
     # ==============================
 
     def create(self, validated_data):
+
         request = self.context.get("request")
         user_code = getattr(getattr(request, "user", None), "code", None)
         now = timezone.now()
 
         price_data = validated_data.pop("price_data", None)
+
         if not price_data:
             raise serializers.ValidationError({"price_data": "Requerido."})
 
@@ -125,7 +126,6 @@ class CatalogSerializer(serializers.ModelSerializer):
 
         from price.models import PriceConfiguration
 
-        # 🔥 Soporta UUID o nombre lógico
         price_conf_obj = PriceConfiguration.objects.filter(
             code=str(price_conf_value).strip()
         ).first()
@@ -150,7 +150,6 @@ class CatalogSerializer(serializers.ModelSerializer):
                 created_at=now,
             )
 
-            # 🔥 Cálculo SOLO para Catalog
             formula_obj = price_conf_obj.variable_formula
             formula = formula_obj.formula_translate
 
@@ -159,6 +158,7 @@ class CatalogSerializer(serializers.ModelSerializer):
             }
 
             try:
+
                 result = eval(formula, {}, context)
 
                 price.net_amount = int(result.get("net_amount", 0))
@@ -168,6 +168,7 @@ class CatalogSerializer(serializers.ModelSerializer):
                 price.retention_amount = int(result.get("retention_amount", 0))
 
             except Exception:
+
                 price.net_amount = 0
                 price.iva_amount = 0
                 price.gross_amount = 0
@@ -177,7 +178,10 @@ class CatalogSerializer(serializers.ModelSerializer):
             price.save()
 
             catalog = Catalog.objects.create(
-                price=price, created_by=user_code, created_at=now, **validated_data
+                price=price,
+                created_by=user_code,
+                created_at=now,
+                **validated_data
             )
 
         return catalog
@@ -187,6 +191,7 @@ class CatalogSerializer(serializers.ModelSerializer):
     # ==============================
 
     def update(self, instance, validated_data):
+
         request = self.context.get("request")
         user_code = getattr(getattr(request, "user", None), "code", None)
         now = timezone.now()
@@ -198,7 +203,6 @@ class CatalogSerializer(serializers.ModelSerializer):
 
         with transaction.atomic():
 
-            # 🔵 Versionado controlado
             if price_data:
 
                 base_net = price_data.get("base_net_amount")
@@ -218,26 +222,30 @@ class CatalogSerializer(serializers.ModelSerializer):
                     current_price.is_current = False
                     current_price.save()
 
-                    # 🔥 Resolver FK correctamente
                     price_conf_obj = None
 
                     if price_conf_value:
+
                         price_conf_obj = PriceConfiguration.objects.filter(
                             code=str(price_conf_value).strip()
                         ).first()
 
                         if not price_conf_obj:
+
                             price_conf_obj = PriceConfiguration.objects.filter(
                                 price_configuration=str(price_conf_value).strip()
                             ).first()
 
                         if not price_conf_obj:
+
                             raise serializers.ValidationError(
                                 {
                                     "price_configuration": "No existe PriceConfiguration válido."
                                 }
                             )
+
                     else:
+
                         price_conf_obj = current_price.price_configuration
 
                     new_price = Price.objects.create(
@@ -250,7 +258,6 @@ class CatalogSerializer(serializers.ModelSerializer):
                         created_at=now,
                     )
 
-                    # 🔥 Cálculo SOLO para Catalog
                     formula_obj = price_conf_obj.variable_formula
                     formula = formula_obj.formula_translate
 
@@ -259,6 +266,7 @@ class CatalogSerializer(serializers.ModelSerializer):
                     }
 
                     try:
+
                         result = eval(formula, {}, context)
 
                         new_price.net_amount = int(result.get("net_amount", 0))
@@ -268,6 +276,7 @@ class CatalogSerializer(serializers.ModelSerializer):
                         new_price.retention_amount = int(result.get("retention_amount", 0))
 
                     except Exception:
+
                         new_price.net_amount = 0
                         new_price.iva_amount = 0
                         new_price.gross_amount = 0
@@ -278,7 +287,6 @@ class CatalogSerializer(serializers.ModelSerializer):
 
                     instance.price = new_price
 
-            # 🔴 Asignación directa
             elif direct_price_code:
 
                 new_price = Price.objects.filter(
@@ -292,7 +300,6 @@ class CatalogSerializer(serializers.ModelSerializer):
 
                 instance.price = new_price
 
-            # 🔵 Update normal
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
 
@@ -310,6 +317,8 @@ class CatalogSerializer(serializers.ModelSerializer):
             "cover_image",
             "menu",
             "menu_name",
+            "menu_background_color",
+            "menu_text_color",
             "name",
             "description",
             "item_group",
@@ -768,7 +777,7 @@ class ServiceSerializer(serializers.ModelSerializer):
 class MenuSerializer(serializers.ModelSerializer):
     class Meta:
         model = Menu
-        fields = ["id", "menu", "description", "franchise_only"]
+        fields = ["id", "menu", "description", "franchise_only", "background_color", "text_color"]
         read_only_fields = ["id"]
 
 

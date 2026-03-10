@@ -15,7 +15,6 @@ class Warehouse(models.Model):
     description = models.TextField(blank=True, verbose_name="Descripción")
     is_active = models.BooleanField(default=True, verbose_name="Activo")
 
-    # Relaciones
     franchise = models.ForeignKey(
         "franchise.Franchise",
         on_delete=models.CASCADE,
@@ -23,7 +22,6 @@ class Warehouse(models.Model):
         verbose_name="Franquicia",
     )
 
-    # Campos de auditoría
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -73,7 +71,6 @@ class InventoryItem(models.Model):
         max_digits=12, decimal_places=2, verbose_name="Costo Total"
     )
 
-    # Relaciones
     warehouse = models.ForeignKey(
         Warehouse,
         on_delete=models.CASCADE,
@@ -87,7 +84,6 @@ class InventoryItem(models.Model):
         verbose_name="Item del Catálogo",
     )
 
-    # Campos de auditoría
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -142,7 +138,6 @@ class InventoryMovement(models.Model):
     notes = models.TextField(blank=True, verbose_name="Notas")
     movement_date = models.DateTimeField(verbose_name="Fecha del Movimiento")
 
-    # Relaciones
     warehouse = models.ForeignKey(
         Warehouse,
         on_delete=models.CASCADE,
@@ -156,7 +151,6 @@ class InventoryMovement(models.Model):
         verbose_name="Item del Catálogo",
     )
 
-    # Campos de auditoría
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -202,7 +196,6 @@ class InventoryCount(models.Model):
     )
     notes = models.TextField(blank=True, verbose_name="Notas")
 
-    # Relaciones
     warehouse = models.ForeignKey(
         Warehouse,
         on_delete=models.CASCADE,
@@ -210,7 +203,6 @@ class InventoryCount(models.Model):
         verbose_name="Almacén",
     )
 
-    # Campos de auditoría
     created_by = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
@@ -251,7 +243,6 @@ class InventoryCountItem(models.Model):
     )
     notes = models.TextField(blank=True, verbose_name="Notas")
 
-    # Relaciones
     inventory_count = models.ForeignKey(
         InventoryCount,
         on_delete=models.CASCADE,
@@ -265,7 +256,6 @@ class InventoryCountItem(models.Model):
         verbose_name="Item del Catálogo",
     )
 
-    # Campos de auditoría
     created_at = models.DateTimeField(
         auto_now_add=True, verbose_name="Fecha de Creación"
     )
@@ -410,11 +400,50 @@ class Provider(models.Model):
     rating = models.IntegerField(default=0)
     obs_provider = models.TextField()
 
+    contact_name = models.CharField(max_length=100, null=True)
+    contact_mail = models.CharField(max_length=255, null=True)
+    contact_phone = models.BigIntegerField(null=True)
+    contact_phone2 = models.BigIntegerField(null=True)
+    website_url = models.TextField(null=True)
+
+    obs_contact = models.CharField(max_length=255, null=True)
+    company_name = models.CharField(max_length=255, null=True)
+    company_rut = models.CharField(max_length=12, null=True)
+    company_activity = models.CharField(max_length=255, null=True)
+    legal_representative = models.CharField(max_length=255, null=True)
+
+    billing_address = models.TextField(null=True)
+    billing_mail = models.CharField(max_length=255, null=True)
+    billing_phone = models.BigIntegerField(null=True)
+
+    company_bank = models.IntegerField(null=True)
+    bank_account_type = models.IntegerField(null=True)
+    bank_account_number = models.CharField(max_length=255, null=True)
+    bank_account_mail = models.CharField(max_length=255, null=True)
+
+    dispatch_address = models.CharField(max_length=255, null=True)
+    dispatch_maps_location = models.CharField(max_length=255, null=True)
+    obs_dispatch = models.TextField(null=True)
+
+    dispatch_district = models.IntegerField(null=True)
+    dispatch_region = models.IntegerField(null=True)
+
     is_active = models.BooleanField(default=True)
     is_deleted = models.BooleanField(null=True, blank=True)
     is_confirmed = models.BooleanField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    created_by = models.CharField(max_length=36)
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True)
+    updated_by = models.CharField(max_length=36, null=True, blank=True)
+    deleted_by = models.CharField(max_length=36, null=True, blank=True)
+
+    log = models.TextField(default="init;")
+    version = models.IntegerField(default=1)
 
     class Meta:
         db_table = "provider"
