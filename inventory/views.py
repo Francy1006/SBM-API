@@ -13,6 +13,7 @@ from .models import (
     TransportType,
     MeasureUnit,
     Provider,
+    ProviderType,
 )
 from .serializers import (
     WarehouseSerializer,
@@ -25,6 +26,7 @@ from .serializers import (
     TransportTypeSerializer,
     MeasureUnitSerializer,
     ProviderSerializer,
+    ProviderTypeSerializer
 )
 
 # Create your views here.
@@ -199,3 +201,17 @@ class ProviderViewSet(viewsets.ModelViewSet):
     search_fields = ["provider"]
     ordering_fields = ["provider", "created_at"]
     ordering = ["provider"]
+
+
+class ProviderTypeViewSet(viewsets.ModelViewSet):
+    queryset = ProviderType.objects.all()
+    serializer_class = ProviderTypeSerializer
+    filter_backends = [
+        DjangoFilterBackend,
+        SearchFilter,
+        OrderingFilter,
+    ]
+    filterset_fields = ["type"]
+    search_fields = ["type", "description"]
+    ordering_fields = ["id", "type"]
+    ordering = ["type"]

@@ -11,6 +11,7 @@ from .views import (
     TransportTypeViewSet,
     MeasureUnitViewSet,
     ProviderViewSet,
+    ProviderTypeViewSet,
 )
 
 router = DefaultRouter()
@@ -24,6 +25,7 @@ router.register(r"package-types", PackageTypeViewSet)
 router.register(r"transport-types", TransportTypeViewSet)
 router.register(r"measure-units", MeasureUnitViewSet)
 router.register(r"providers", ProviderViewSet)
+router.register(r"provider-types", ProviderTypeViewSet, basename="provider-types")
 
 
 urlpatterns = [

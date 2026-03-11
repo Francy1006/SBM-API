@@ -10,6 +10,7 @@ from .models import (
     TransportType,
     MeasureUnit,
     Provider,
+    ProviderType
 )
 
 
@@ -303,7 +304,181 @@ class PackageSerializer(serializers.ModelSerializer):
 
 
 class ProviderSerializer(serializers.ModelSerializer):
+    type_name = serializers.SerializerMethodField()
+    field_verbose_names = serializers.SerializerMethodField()
+
+    def get_type_name(self, obj):
+        return obj.type.type if obj.type else None
+
+    def get_field_verbose_names(self, obj):
+        field_names = [
+            "id",
+            "code",
+            "provider",
+            "type",
+            "rating",
+            "obs_provider",
+            "contact_name",
+            "contact_mail",
+            "contact_phone",
+            "contact_phone2",
+            "website_url",
+            "obs_contact",
+            "company_name",
+            "company_rut",
+            "company_activity",
+            "legal_representative",
+            "billing_address",
+            "billing_mail",
+            "billing_phone",
+            "company_bank",
+            "bank_account_type",
+            "bank_account_number",
+            "bank_account_mail",
+            "dispatch_address",
+            "dispatch_maps_location",
+            "obs_dispatch",
+            "dispatch_district",
+            "dispatch_region",
+            "is_active",
+            "is_deleted",
+            "is_confirmed",
+            "created_at",
+            "updated_at",
+            "confirmed_at",
+            "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "log",
+            "version",
+        ]
+        return {
+            field: (
+                obj._meta.get_field(field).verbose_name
+                if field in [f.name for f in obj._meta.fields]
+                else field
+            )
+            for field in field_names
+        }
+
+    def create(self, validated_data):
+        request = self.context.get("request", None)
+
+        validated_data.pop("code", None)
+        validated_data.pop("created_by", None)
+        validated_data.pop("updated_by", None)
+        validated_data.pop("confirmed_by", None)
+        validated_data.pop("deleted_by", None)
+
+        user_code = getattr(getattr(request, "user", None), "code", None)
+
+        provider = Provider._default_manager.create(
+            **validated_data,
+            created_by=user_code,
+            obs_provider=validated_data.get("obs_provider", "") or "",
+        )
+        return provider
+
+    def update(self, instance, validated_data):
+        request = self.context.get("request", None)
+        user_code = getattr(getattr(request, "user", None), "code", None)
+
+        validated_data.pop("code", None)
+        validated_data.pop("created_by", None)
+        validated_data.pop("confirmed_by", None)
+        validated_data.pop("deleted_by", None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.updated_by = user_code
+        instance.save()
+        return instance
+
     class Meta:
         model = Provider
-        fields = "__all__"
+        fields = [
+            "id",
+            "code",
+            "provider",
+            "type",
+            "type_name",
+            "rating",
+            "obs_provider",
+            "contact_name",
+            "contact_mail",
+            "contact_phone",
+            "contact_phone2",
+            "website_url",
+            "obs_contact",
+            "company_name",
+            "company_rut",
+            "company_activity",
+            "legal_representative",
+            "billing_address",
+            "billing_mail",
+            "billing_phone",
+            "company_bank",
+            "bank_account_type",
+            "bank_account_number",
+            "bank_account_mail",
+            "dispatch_address",
+            "dispatch_maps_location",
+            "obs_dispatch",
+            "dispatch_district",
+            "dispatch_region",
+            "is_active",
+            "is_deleted",
+            "is_confirmed",
+            "created_at",
+            "updated_at",
+            "confirmed_at",
+            "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "log",
+            "version",
+            "field_verbose_names",
+        ]
+        read_only_fields = [
+            "id",
+            "code",
+            "created_at",
+            "updated_at",
+            "confirmed_at",
+            "deleted_at",
+            "created_by",
+            "confirmed_by",
+            "updated_by",
+            "deleted_by",
+            "field_verbose_names",
+            "type_name",
+        ]
+        extra_kwargs = {
+            "obs_provider": {"required": False, "allow_blank": True},
+            "contact_name": {"required": False, "allow_null": True, "allow_blank": True},
+            "contact_mail": {"required": False, "allow_null": True, "allow_blank": True},
+            "website_url": {"required": False, "allow_null": True, "allow_blank": True},
+            "obs_contact": {"required": False, "allow_null": True, "allow_blank": True},
+            "company_name": {"required": False, "allow_null": True, "allow_blank": True},
+            "company_rut": {"required": False, "allow_null": True, "allow_blank": True},
+            "company_activity": {"required": False, "allow_null": True, "allow_blank": True},
+            "legal_representative": {"required": False, "allow_null": True, "allow_blank": True},
+            "billing_address": {"required": False, "allow_null": True, "allow_blank": True},
+            "billing_mail": {"required": False, "allow_null": True, "allow_blank": True},
+            "bank_account_number": {"required": False, "allow_null": True, "allow_blank": True},
+            "bank_account_mail": {"required": False, "allow_null": True, "allow_blank": True},
+            "dispatch_address": {"required": False, "allow_null": True, "allow_blank": True},
+            "dispatch_maps_location": {"required": False, "allow_null": True, "allow_blank": True},
+            "obs_dispatch": {"required": False, "allow_null": True, "allow_blank": True},
+        }
 
+
+class ProviderTypeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProviderType
+        fields = "__all__"

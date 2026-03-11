@@ -396,7 +396,11 @@ class Provider(models.Model):
     id = models.AutoField(primary_key=True)
     code = models.CharField(max_length=36, unique=True)
     provider = models.CharField(max_length=50, unique=True)
-    type = models.IntegerField()
+    type = models.ForeignKey(
+        "ProviderType",
+        on_delete=models.PROTECT,
+        db_column="type",
+    )
     rating = models.IntegerField(default=0)
     obs_provider = models.TextField()
 
@@ -451,3 +455,13 @@ class Provider(models.Model):
 
     def __str__(self):
         return self.provider
+
+
+class ProviderType(models.Model):
+    id = models.AutoField(primary_key=True)
+    type = models.CharField(max_length=50)
+    description = models.TextField()
+
+    class Meta:
+        db_table = "provider_type"
+        managed = False
