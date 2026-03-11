@@ -949,7 +949,15 @@ class CatalogViewSet(viewsets.ModelViewSet):
 
 
 class ProductViewSet(viewsets.ModelViewSet):
-    queryset = Product.objects.all()
+    queryset = Product.objects.select_related(
+        "provider",
+        "type",
+        "item_group",
+        "category",
+        "package",
+        "price",
+        "price__price_configuration",
+    )
     serializer_class = ProductSerializer
     lookup_field = "code"
 
@@ -964,7 +972,7 @@ class ProductViewSet(viewsets.ModelViewSet):
         "category",
     ]
     search_fields = ["description", "sku", "code", "obs"]
-    ordering_fields = ["id", "description", "created_at", "updated_at"]
+    ordering_fields = "__all__"
     ordering = ["-id"]
 
     # ===============================
@@ -1039,11 +1047,11 @@ class ProductViewSet(viewsets.ModelViewSet):
             # 🟢 Crear nueva versión
             new_price = Price.objects.create(
                 base_net_amount=base_net_amount_new,
-                net_amount=base_net_amount_new,
-                gross_amount=price_obj.gross_amount,
-                iva_amount=price_obj.iva_amount,
-                aditional_tax_amount=price_obj.aditional_tax_amount,
-                retention_amount=price_obj.retention_amount,
+                net_amount=0,
+                gross_amount=0,
+                iva_amount=0,
+                aditional_tax_amount=0,
+                retention_amount=0,
                 price_configuration=price_conf_obj,
                 record_item_code=instance.code,
                 price_record_type=1,
@@ -1051,6 +1059,55 @@ class ProductViewSet(viewsets.ModelViewSet):
                 created_by=getattr(request.user, "code", "system"),
                 created_at=timezone.now(),
             )
+
+            formula_obj = getattr(price_conf_obj, "variable_formula", None)
+
+            if formula_obj and formula_obj.price_variables:
+
+                formula = formula_obj.price_variables
+
+                from accounting.models import FiscalConfigurationDetail, FiscalDirective
+
+                context = {
+                    "base_net_amount": new_price.base_net_amount
+                }
+
+                fiscal_details = FiscalConfigurationDetail.objects.filter(
+                    price_configuration=price_conf_obj.code
+                )
+
+                directive_codes = fiscal_details.values_list("fiscal_directive", flat=True)
+                directives = FiscalDirective.objects.filter(code__in=directive_codes)
+                directive_map = {d.code: d for d in directives}
+
+                for detail in fiscal_details:
+                    directive = directive_map.get(detail.fiscal_directive)
+                    if directive and detail.var:
+                        context[detail.var] = float(directive.value)
+
+                results = {}
+
+                for line in formula.split(";"):
+
+                    if "=" not in line:
+                        continue
+
+                    key, expr = line.split("=")
+                    key = key.strip()
+                    expr = expr.strip()
+
+                    for var, val in context.items():
+                        expr = expr.replace(var, str(val))
+
+                    results[key] = eval(expr)
+
+                new_price.net_amount = int(results.get("net_amount", 0))
+                new_price.iva_amount = int(results.get("iva_amount", 0))
+                new_price.gross_amount = int(results.get("gross_amount", 0))
+                new_price.aditional_tax_amount = int(results.get("aditional_tax_amount", 0))
+                new_price.retention_amount = int(results.get("retention_amount", 0))
+
+                new_price.save()
 
             # 🔗 Vincular nuevo price
             instance.price = new_price

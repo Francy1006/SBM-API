@@ -28,7 +28,9 @@ class CatalogSerializer(serializers.ModelSerializer):
     field_verbose_names = serializers.SerializerMethodField()
 
     menu_name = serializers.SerializerMethodField()
-    menu_background_color = serializers.CharField(source="menu.background_color", read_only=True)
+    menu_background_color = serializers.CharField(
+        source="menu.background_color", read_only=True
+    )
     menu_text_color = serializers.CharField(source="menu.text_color", read_only=True)
 
     item_group_name = serializers.SerializerMethodField()
@@ -40,7 +42,9 @@ class CatalogSerializer(serializers.ModelSerializer):
 
     price_data = serializers.DictField(write_only=True, required=False)
 
-    base_net_amount = serializers.IntegerField(source="price.base_net_amount", read_only=True)
+    base_net_amount = serializers.IntegerField(
+        source="price.base_net_amount", read_only=True
+    )
     net_amount = serializers.IntegerField(source="price.net_amount", read_only=True)
     gross_amount = serializers.IntegerField(source="price.gross_amount", read_only=True)
     iva_amount = serializers.IntegerField(source="price.iva_amount", read_only=True)
@@ -116,6 +120,12 @@ class CatalogSerializer(serializers.ModelSerializer):
         price_data = validated_data.pop("price_data", None)
 
         if not price_data:
+            price_data = {
+                "base_net_amount": validated_data.pop("base_net_amount", None),
+                "price_configuration": validated_data.pop("price_configuration", None),
+            }
+
+        if not price_data:
             raise serializers.ValidationError({"price_data": "Requerido."})
 
         base_net = price_data.get("base_net_amount")
@@ -178,10 +188,7 @@ class CatalogSerializer(serializers.ModelSerializer):
             price.save()
 
             catalog = Catalog.objects.create(
-                price=price,
-                created_by=user_code,
-                created_at=now,
-                **validated_data
+                price=price, created_by=user_code, created_at=now, **validated_data
             )
 
         return catalog
@@ -272,8 +279,12 @@ class CatalogSerializer(serializers.ModelSerializer):
                         new_price.net_amount = int(result.get("net_amount", 0))
                         new_price.iva_amount = int(result.get("iva_amount", 0))
                         new_price.gross_amount = int(result.get("gross_amount", 0))
-                        new_price.aditional_tax_amount = int(result.get("aditional_tax_amount", 0))
-                        new_price.retention_amount = int(result.get("retention_amount", 0))
+                        new_price.aditional_tax_amount = int(
+                            result.get("aditional_tax_amount", 0)
+                        )
+                        new_price.retention_amount = int(
+                            result.get("retention_amount", 0)
+                        )
 
                     except Exception:
 
@@ -343,12 +354,12 @@ class CatalogSerializer(serializers.ModelSerializer):
             "price_data",
             "price",
             "base_net_amount",
-            "price_configuration",
             "net_amount",
             "gross_amount",
             "iva_amount",
             "aditional_tax_amount",
             "retention_amount",
+            "price_configuration",
         ]
 
         read_only_fields = [
@@ -384,6 +395,7 @@ class ProductSerializer(serializers.ModelSerializer):
     base_net_amount = serializers.IntegerField(
         source="price.base_net_amount", read_only=True
     )
+    base_net_amount_input = serializers.IntegerField(write_only=True)
     net_amount = serializers.IntegerField(source="price.net_amount", read_only=True)
     gross_amount = serializers.IntegerField(source="price.gross_amount", read_only=True)
     iva_amount = serializers.IntegerField(source="price.iva_amount", read_only=True)
@@ -396,8 +408,7 @@ class ProductSerializer(serializers.ModelSerializer):
     price_configuration = serializers.CharField(
         source="price.price_configuration.code", read_only=True
     )
-
-    price_data = serializers.DictField(write_only=True, required=True)
+    price_configuration_input = serializers.CharField(write_only=True)
 
     # ==============================
     # GETTERS NOMBRES
@@ -469,10 +480,20 @@ class ProductSerializer(serializers.ModelSerializer):
         request = self.context.get("request", None)
         price_data = validated_data.pop("price_data", None)
 
+        # permitir formato directo desde el frontend
         if not price_data:
-            raise serializers.ValidationError(
-                {"price_data": "Este campo es requerido."}
-            )
+            base_net = validated_data.pop("base_net_amount_input", None)
+            price_conf = validated_data.pop("price_configuration_input", None)
+
+            if base_net is None or price_conf is None:
+                raise serializers.ValidationError(
+                    {"price_data": "Este campo es requerido."}
+                )
+
+            price_data = {
+                "base_net_amount": base_net,
+                "price_configuration": price_conf,
+            }
 
         base_net = price_data.get("base_net_amount")
         price_conf_value = price_data.get("price_configuration")
@@ -506,17 +527,10 @@ class ProductSerializer(serializers.ModelSerializer):
 
         with transaction.atomic():
 
-            # 🔹 Crear producto
+            # 🔹 generar código de producto
             product_code = str(uuid.uuid4())
 
-            product = Product._default_manager.create(
-                **validated_data,
-                code=product_code,
-                created_by=user_code,
-                created_at=now,
-            )
-
-            # 🔹 Crear price base
+            # 🔹 crear price primero
             price_code = str(uuid.uuid4())
 
             price_obj = Price._default_manager.create(
@@ -538,21 +552,51 @@ class ProductSerializer(serializers.ModelSerializer):
             # 🔥 CALCULAR FÓRMULA (igual que Catalog)
             formula_obj = getattr(price_conf_obj, "variable_formula", None)
 
-            if formula_obj and formula_obj.formula_translate:
-                formula = formula_obj.formula_translate
+            if formula_obj and formula_obj.price_variables:
+                formula = formula_obj.price_variables
 
-                context = {
-                    "base_net_amount": price_obj.base_net_amount,
-                }
+                from accounting.models import FiscalConfigurationDetail, FiscalDirective
+
+                context = {"base_net_amount": price_obj.base_net_amount}
+
+                fiscal_details = FiscalConfigurationDetail.objects.filter(
+                    price_configuration=price_conf_obj.code
+                )
+
+                directive_codes = fiscal_details.values_list(
+                    "fiscal_directive", flat=True
+                )
+                directives = FiscalDirective.objects.filter(code__in=directive_codes)
+                directive_map = {d.code: d for d in directives}
+
+                for detail in fiscal_details:
+                    directive = directive_map.get(detail.fiscal_directive)
+                    if directive and detail.var:
+                        context[detail.var] = float(directive.value)
 
                 try:
-                    result = eval(formula, {}, context)
+                    results = {}
 
-                    price_obj.net_amount = int(result.get("net_amount", 0))
-                    price_obj.iva_amount = int(result.get("iva_amount", 0))
-                    price_obj.gross_amount = int(result.get("gross_amount", 0))
-                    price_obj.aditional_tax_amount = int(result.get("aditional_tax_amount", 0))
-                    price_obj.retention_amount = int(result.get("retention_amount", 0))
+                    for line in [l.strip() for l in formula.split(";") if l.strip()]:
+                        if "=" not in line:
+                            continue
+
+                        key, expr = line.split("=")
+                        key = key.strip()
+                        expr = expr.strip()
+
+                        for var, val in context.items():
+                            expr = expr.replace(var, str(val))
+
+                        results[key] = eval(expr)
+
+                    price_obj.net_amount = int(results.get("net_amount", 0))
+                    price_obj.iva_amount = int(results.get("iva_amount", 0))
+                    price_obj.gross_amount = int(results.get("gross_amount", 0))
+                    price_obj.aditional_tax_amount = int(
+                        results.get("aditional_tax_amount", 0)
+                    )
+                    price_obj.retention_amount = int(results.get("retention_amount", 0))
 
                 except Exception:
                     price_obj.net_amount = 0
@@ -561,11 +605,16 @@ class ProductSerializer(serializers.ModelSerializer):
                     price_obj.aditional_tax_amount = 0
                     price_obj.retention_amount = 0
 
-                price_obj.save()
+            price_obj.save()
 
-            # 🔗 Vincular price al producto
-            product.price = price_obj
-            product.save(update_fields=["price"])
+            # 🔹 crear producto con price
+            product = Product._default_manager.create(
+                **validated_data,
+                code=product_code,
+                price=price_obj,
+                created_by=user_code,
+                created_at=now,
+            )
 
         return product
 
@@ -577,7 +626,12 @@ class ProductSerializer(serializers.ModelSerializer):
             "sku",
             "description",
             "base_net_amount",
+            "base_net_amount_input",
             "net_amount",
+            "gross_amount",
+            "iva_amount",
+            "aditional_tax_amount",
+            "retention_amount",
             "obs",
             "package_unit",
             "min_package_purchase",
@@ -605,13 +659,9 @@ class ProductSerializer(serializers.ModelSerializer):
             "deleted_by",
             "log",
             "version",
-            "gross_amount",
-            "iva_amount",
-            "aditional_tax_amount",
-            "retention_amount",
             "price_configuration",
+            "price_configuration_input",
             "field_verbose_names",
-            "price_data",
             "price",
         ]
 
@@ -627,6 +677,14 @@ class ProductSerializer(serializers.ModelSerializer):
             "updated_by",
             "deleted_by",
             "price",
+            # seguridad API
+            "base_net_amount",
+            "net_amount",
+            "gross_amount",
+            "iva_amount",
+            "aditional_tax_amount",
+            "retention_amount",
+            "price_configuration",
         ]
 
 
@@ -777,7 +835,14 @@ class ServiceSerializer(serializers.ModelSerializer):
 class MenuSerializer(serializers.ModelSerializer):
     class Meta:
         model = Menu
-        fields = ["id", "menu", "description", "franchise_only", "background_color", "text_color"]
+        fields = [
+            "id",
+            "menu",
+            "description",
+            "franchise_only",
+            "background_color",
+            "text_color",
+        ]
         read_only_fields = ["id"]
 
 

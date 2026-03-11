@@ -9,6 +9,7 @@ class VariableFormula(models.Model):
     formula = models.CharField(max_length=50)
     formula_template = models.TextField()
     formula_translate = models.TextField()
+    price_variables = models.TextField(null=True, blank=True)
     is_deleted = models.BooleanField(null=True)
     is_confirmed = models.BooleanField(null=True)
     created_at = models.DateTimeField(null=True)
