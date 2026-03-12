@@ -293,28 +293,71 @@ class Service(models.Model):
     id = models.AutoField(primary_key=True)
     code = models.CharField(max_length=36, unique=True)
     sku = models.CharField(max_length=50, unique=True)
+
     description = models.TextField()
     obs = models.TextField()
+
     package_unit = models.IntegerField()
     min_package_purchase = models.IntegerField()
+
     price = models.ForeignKey(
-        "price.Price", db_column="price", to_field="code", on_delete=models.PROTECT
+        "price.Price",
+        db_column="price",
+        to_field="code",
+        on_delete=models.PROTECT,
+        related_name="services",
     )
+
     provider = models.ForeignKey(
-        Provider, db_column="provider", on_delete=models.PROTECT
+        Provider,
+        db_column="provider",
+        on_delete=models.PROTECT,
+        related_name="services",
     )
-    type = models.ForeignKey("ItemType", db_column="type", on_delete=models.PROTECT)
+
+    type = models.ForeignKey(
+        "ItemType",
+        db_column="type",
+        on_delete=models.PROTECT,
+        related_name="services",
+    )
+
     item_group = models.ForeignKey(
-        "ItemGroup", db_column="item_group", on_delete=models.PROTECT
+        "ItemGroup",
+        db_column="item_group",
+        on_delete=models.PROTECT,
+        related_name="services",
     )
+
     category = models.ForeignKey(
-        "ItemCategory", db_column="category", on_delete=models.PROTECT
+        "ItemCategory",
+        db_column="category",
+        on_delete=models.PROTECT,
+        related_name="services",
     )
+
     url = models.CharField(max_length=255, null=True, blank=True)
+
     is_active = models.BooleanField(default=True)
+    is_deleted = models.BooleanField(null=True, blank=True)
+    is_confirmed = models.BooleanField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    created_by = models.CharField(max_length=36)
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True)
+    updated_by = models.CharField(max_length=36, null=True, blank=True)
+    deleted_by = models.CharField(max_length=36, null=True, blank=True)
+
+    log = models.TextField(default="init;")
+    version = models.IntegerField(default=1)
 
     class Meta:
         db_table = "service"
+        ordering = ["-created_at"]
 
     def __str__(self):
         return self.description

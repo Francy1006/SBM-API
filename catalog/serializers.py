@@ -1046,6 +1046,209 @@ class MaterialSerializer(serializers.ModelSerializer):
 
 
 class ServiceSerializer(serializers.ModelSerializer):
+    field_verbose_names = serializers.SerializerMethodField()
+
+    type_name = serializers.SerializerMethodField()
+    item_group_name = serializers.SerializerMethodField()
+    category_name = serializers.SerializerMethodField()
+    provider_name = serializers.SerializerMethodField()
+
+    base_net_amount = serializers.IntegerField(
+        source="price.base_net_amount", read_only=True
+    )
+    base_net_amount_input = serializers.IntegerField(write_only=True)
+
+    net_amount = serializers.IntegerField(source="price.net_amount", read_only=True)
+    gross_amount = serializers.IntegerField(source="price.gross_amount", read_only=True)
+    iva_amount = serializers.IntegerField(source="price.iva_amount", read_only=True)
+
+    aditional_tax_amount = serializers.IntegerField(
+        source="price.aditional_tax_amount", read_only=True
+    )
+    retention_amount = serializers.IntegerField(
+        source="price.retention_amount", read_only=True
+    )
+
+    price_configuration = serializers.CharField(
+        source="price.price_configuration.code", read_only=True
+    )
+    price_configuration_input = serializers.CharField(write_only=True)
+
+    def get_type_name(self, obj):
+        return obj.type.type if obj.type else None
+
+    def get_item_group_name(self, obj):
+        return obj.item_group.group_name if obj.item_group else None
+
+    def get_category_name(self, obj):
+        return obj.category.category if obj.category else None
+
+    def get_provider_name(self, obj):
+        return obj.provider.provider if obj.provider else None
+
+    def get_field_verbose_names(self, obj):
+
+        fields = [
+            "id",
+            "code",
+            "description",
+            "obs",
+            "package_unit",
+            "min_package_purchase",
+            "provider",
+            "type",
+            "item_group",
+            "category",
+            "url",
+            "is_active",
+            "is_deleted",
+            "is_confirmed",
+            "created_at",
+        ]
+
+        return {
+            f: (
+                obj._meta.get_field(f).verbose_name
+                if f in [x.name for x in obj._meta.fields]
+                else f
+            )
+            for f in fields
+        }
+
+    def create(self, validated_data):
+
+        request = self.context.get("request", None)
+
+        validated_data.pop("created_by", None)
+        validated_data.pop("created_at", None)
+        validated_data.pop("updated_by", None)
+        validated_data.pop("deleted_by", None)
+        validated_data.pop("confirmed_by", None)
+
+        base_net = validated_data.pop("base_net_amount_input")
+        price_conf_value = validated_data.pop("price_configuration_input")
+
+        from price.models import PriceConfiguration
+        import uuid
+
+        price_conf_obj = PriceConfiguration.objects.filter(
+            code=str(price_conf_value).strip()
+        ).first()
+
+        if not price_conf_obj:
+            price_conf_obj = PriceConfiguration.objects.filter(
+                price_configuration=str(price_conf_value).strip()
+            ).first()
+
+        if not price_conf_obj:
+            raise serializers.ValidationError(
+                {"price_configuration": "No existe PriceConfiguration válido."}
+            )
+
+        user_code = getattr(getattr(request, "user", None), "code", "system")
+        now = timezone.now()
+
+        with transaction.atomic():
+
+            service_code = str(uuid.uuid4())
+            price_code = str(uuid.uuid4())
+
+            price_obj = Price.objects.create(
+                code=price_code,
+                base_net_amount=base_net,
+                net_amount=0,
+                gross_amount=0,
+                iva_amount=0,
+                aditional_tax_amount=0,
+                retention_amount=0,
+                price_configuration=price_conf_obj,
+                record_item_code=service_code,
+                price_record_type=3,
+                is_current=True,
+                created_by=user_code,
+                created_at=now,
+            )
+
+            formula_obj = getattr(price_conf_obj, "variable_formula", None)
+
+            if formula_obj and formula_obj.price_variables:
+
+                formula = formula_obj.price_variables
+
+                from accounting.models import FiscalConfigurationDetail, FiscalDirective
+
+                context = {
+                    "base_net_amount": price_obj.base_net_amount,
+                }
+
+                fiscal_details = FiscalConfigurationDetail.objects.filter(
+                    price_configuration=price_conf_obj.code
+                )
+
+                directive_codes = fiscal_details.values_list(
+                    "fiscal_directive", flat=True
+                )
+
+                directives = FiscalDirective.objects.filter(code__in=directive_codes)
+
+                directive_map = {d.code: d for d in directives}
+
+                for detail in fiscal_details:
+
+                    directive = directive_map.get(detail.fiscal_directive)
+
+                    if directive and detail.var:
+                        context[detail.var] = float(directive.value)
+
+                try:
+
+                    results = {}
+
+                    for line in [l.strip() for l in formula.split(";") if l.strip()]:
+
+                        if "=" not in line:
+                            continue
+
+                        key, expr = line.split("=")
+
+                        key = key.strip()
+                        expr = expr.strip()
+
+                        for var, val in context.items():
+                            expr = expr.replace(var, str(val))
+
+                        results[key] = eval(expr)
+
+                    price_obj.net_amount = int(results.get("net_amount", 0))
+                    price_obj.iva_amount = int(results.get("iva_amount", 0))
+                    price_obj.gross_amount = int(results.get("gross_amount", 0))
+                    price_obj.aditional_tax_amount = int(
+                        results.get("aditional_tax_amount", 0)
+                    )
+                    price_obj.retention_amount = int(
+                        results.get("retention_amount", 0)
+                    )
+
+                except Exception:
+
+                    price_obj.net_amount = 0
+                    price_obj.iva_amount = 0
+                    price_obj.gross_amount = 0
+                    price_obj.aditional_tax_amount = 0
+                    price_obj.retention_amount = 0
+
+            price_obj.save()
+
+            service = Service.objects.create(
+                **validated_data,
+                code=service_code,
+                price=price_obj,
+                created_by=user_code,
+                created_at=now,
+            )
+
+        return service
+
     class Meta:
         model = Service
         fields = [
@@ -1053,21 +1256,45 @@ class ServiceSerializer(serializers.ModelSerializer):
             "code",
             "sku",
             "description",
+            "base_net_amount",
+            "base_net_amount_input",
+            "net_amount",
+            "gross_amount",
+            "iva_amount",
+            "aditional_tax_amount",
+            "retention_amount",
             "obs",
             "package_unit",
             "min_package_purchase",
-            "price",
             "provider",
+            "provider_name",
             "type",
+            "type_name",
             "item_group",
+            "item_group_name",
             "category",
+            "category_name",
             "url",
             "is_active",
+            "is_deleted",
+            "is_confirmed",
+            "created_at",
+            "price_configuration",
+            "price_configuration_input",
+            "field_verbose_names",
         ]
         read_only_fields = [
             "id",
             "code",
             "sku",
+            "created_at",
+            "base_net_amount",
+            "net_amount",
+            "gross_amount",
+            "iva_amount",
+            "aditional_tax_amount",
+            "retention_amount",
+            "price_configuration",
         ]
 
 

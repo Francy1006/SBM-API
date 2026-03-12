@@ -1455,12 +1455,22 @@ class MaterialViewSet(viewsets.ModelViewSet):
 
 
 class ServiceViewSet(viewsets.ModelViewSet):
-    queryset = Service.objects.all()
+    queryset = Service.objects.select_related(
+        "provider",
+        "type",
+        "item_group",
+        "category",
+        "price",
+        "price__price_configuration",
+    )
     serializer_class = ServiceSerializer
+    lookup_field = "code"
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
 
     filterset_fields = [
         "is_active",
+        "is_deleted",
+        "is_confirmed",
         "provider",
         "type",
         "item_group",
@@ -1468,25 +1478,190 @@ class ServiceViewSet(viewsets.ModelViewSet):
     ]
 
     search_fields = ["description", "sku", "code", "obs"]
-    ordering_fields = ["id", "description"]
+    ordering_fields = "__all__"
     ordering = ["-id"]
 
-    @action(detail=False, methods=["get"])
-    def active(self, request):
-        queryset = self.get_queryset().filter(is_active=True, is_deleted=False)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+    def perform_create(self, serializer):
+        serializer.save(created_by=getattr(self.request.user, "code", "system"))
 
-    @action(detail=False, methods=["get"])
-    def by_provider(self, request):
-        provider_id = request.query_params.get("provider_id")
-        if provider_id:
-            queryset = self.get_queryset().filter(provider=provider_id, is_active=True)
-        else:
-            queryset = self.get_queryset().filter(is_active=True)
+    def partial_update(self, request, *args, **kwargs):
 
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
+        instance = self.get_object()
+        price_data = request.data.get("price_data")
+
+        if not price_data:
+            return super().partial_update(request, *args, **kwargs)
+
+        price_obj = instance.price
+
+        if not price_obj:
+            return Response(
+                {"detail": "Precio actual no encontrado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        base_net_amount_new = price_data.get("base_net_amount")
+        price_configuration_new = price_data.get("price_configuration")
+
+        try:
+            base_net_amount_new = int(base_net_amount_new)
+        except Exception:
+            return Response(
+                {"detail": "base_net_amount inválido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        current_pc = (
+            price_obj.price_configuration.code
+            if price_obj.price_configuration
+            else None
+        )
+
+        changed = int(price_obj.base_net_amount) != base_net_amount_new or current_pc != str(price_configuration_new)
+
+        if not changed:
+            serializer = self.get_serializer(instance)
+            return Response(serializer.data)
+
+        with transaction.atomic():
+
+            price_obj.is_current = False
+            price_obj.save(update_fields=["is_current"])
+
+            price_conf_obj = PriceConfiguration.objects.filter(
+                code=str(price_configuration_new).strip()
+            ).first()
+
+            if not price_conf_obj:
+                return Response(
+                    {"detail": "PriceConfiguration inválido."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            new_price = Price.objects.create(
+                base_net_amount=base_net_amount_new,
+                net_amount=0,
+                gross_amount=0,
+                iva_amount=0,
+                aditional_tax_amount=0,
+                retention_amount=0,
+                price_configuration=price_conf_obj,
+                record_item_code=instance.code,
+                price_record_type=3,
+                is_current=True,
+                created_by=getattr(request.user, "code", "system"),
+                created_at=timezone.now(),
+            )
+
+            formula_obj = getattr(price_conf_obj, "variable_formula", None)
+
+            if formula_obj and formula_obj.price_variables:
+
+                formula = formula_obj.price_variables
+
+                from accounting.models import FiscalConfigurationDetail, FiscalDirective
+
+                context = {"base_net_amount": new_price.base_net_amount}
+
+                fiscal_details = FiscalConfigurationDetail.objects.filter(
+                    price_configuration=price_conf_obj.code
+                )
+
+                directive_codes = fiscal_details.values_list("fiscal_directive", flat=True)
+                directives = FiscalDirective.objects.filter(code__in=directive_codes)
+
+                directive_map = {d.code: d for d in directives}
+
+                for detail in fiscal_details:
+                    directive = directive_map.get(detail.fiscal_directive)
+                    if directive and detail.var:
+                        context[detail.var] = float(directive.value)
+
+                results = {}
+
+                for line in formula.split(";"):
+
+                    if "=" not in line:
+                        continue
+
+                    key, expr = line.split("=")
+                    key = key.strip()
+                    expr = expr.strip()
+
+                    for var, val in context.items():
+                        expr = expr.replace(var, str(val))
+
+                    results[key] = eval(expr)
+
+                new_price.net_amount = int(results.get("net_amount", 0))
+                new_price.iva_amount = int(results.get("iva_amount", 0))
+                new_price.gross_amount = int(results.get("gross_amount", 0))
+                new_price.aditional_tax_amount = int(results.get("aditional_tax_amount", 0))
+                new_price.retention_amount = int(results.get("retention_amount", 0))
+
+                new_price.save()
+
+            instance.price = new_price
+            instance.save(update_fields=["price"])
+
+        serializer = self.get_serializer(instance)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["get"], url_path="prices")
+    def prices(self, request, code=None):
+
+        service = self.get_object()
+
+        prices = (
+            Price.objects.filter(record_item_code=service.code)
+            .order_by("created_at")
+            .values(
+                "code",
+                "base_net_amount",
+                "created_at",
+                "is_current",
+            )
+        )
+
+        return Response(list(prices))
+
+    @action(detail=True, methods=["get"], url_path="config")
+    def config(self, request, code=None):
+
+        service = self.get_object()
+
+        price_obj = service.price
+        pc = getattr(price_obj, "price_configuration", None) if price_obj else None
+
+        informativa_data = {
+            "service_code": service.code,
+            "service_sku": service.sku,
+            "price_code": getattr(price_obj, "code", None),
+            "price_configuration": getattr(pc, "code", None),
+            "price_configuration_label": getattr(pc, "price_configuration", None),
+            "base_net_amount": getattr(price_obj, "base_net_amount", None),
+            "price_is_current": getattr(price_obj, "is_current", None),
+        }
+
+        calculation_props = {
+            "code": getattr(pc, "code", None),
+            "baseNetAmount": getattr(price_obj, "base_net_amount", None),
+            "additionalTaxAmount": getattr(price_obj, "aditional_tax_amount", None),
+            "retentionAmount": getattr(price_obj, "retention_amount", None),
+            "selectedServiceSku": service.sku,
+        }
+
+        return Response(
+            {
+                "informativa": {
+                    "data": informativa_data,
+                    "verbose_names": {},
+                },
+                "calculation": {"props": calculation_props},
+                "linking": None,
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class MenuViewSet(viewsets.ModelViewSet):
