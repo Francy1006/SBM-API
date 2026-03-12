@@ -111,6 +111,7 @@ class Catalog(models.Model):
 # PRODUCT
 # =========================
 
+
 class Product(models.Model):
     id = models.AutoField(primary_key=True)
     code = models.CharField(max_length=36, unique=True)
@@ -196,30 +197,91 @@ class Product(models.Model):
 
 
 class Material(models.Model):
+
     id = models.AutoField(primary_key=True)
+
     code = models.CharField(max_length=36, unique=True)
     sku = models.CharField(max_length=50, unique=True)
+
     description = models.TextField()
     obs = models.TextField()
+
     package_unit = models.IntegerField()
     min_package_purchase = models.IntegerField()
-    price = models.ForeignKey("price.Price", db_column="price", to_field="code", on_delete=models.PROTECT)
-    provider = models.ForeignKey(Provider, db_column="provider", on_delete=models.PROTECT)
-    type = models.ForeignKey("ItemType", db_column="type", on_delete=models.PROTECT)
-    item_group = models.ForeignKey("ItemGroup", db_column="item_group", on_delete=models.PROTECT)
-    category = models.ForeignKey("ItemCategory", db_column="category", on_delete=models.PROTECT)
+
+    price = models.ForeignKey(
+        "price.Price",
+        db_column="price",
+        to_field="code",
+        on_delete=models.PROTECT,
+        related_name="materials",
+    )
+
+    provider = models.ForeignKey(
+        Provider,
+        db_column="provider",
+        on_delete=models.PROTECT,
+        related_name="materials",
+    )
+
+    type = models.ForeignKey(
+        "ItemType",
+        db_column="type",
+        on_delete=models.PROTECT,
+        related_name="materials",
+    )
+
+    item_group = models.ForeignKey(
+        "ItemGroup",
+        db_column="item_group",
+        on_delete=models.PROTECT,
+        related_name="materials",
+    )
+
+    category = models.ForeignKey(
+        "ItemCategory",
+        db_column="category",
+        on_delete=models.PROTECT,
+        related_name="materials",
+    )
+
     url = models.CharField(max_length=255, null=True, blank=True)
-    package = models.ForeignKey(Package, db_column="package", on_delete=models.PROTECT)
+
+    package = models.ForeignKey(
+        Package,
+        db_column="package",
+        on_delete=models.PROTECT,
+        related_name="materials",
+    )
+
     is_active = models.BooleanField(default=True)
     is_deleted = models.BooleanField(null=True, blank=True)
     is_confirmed = models.BooleanField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+
+    created_by = models.CharField(max_length=36)
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True)
+    updated_by = models.CharField(max_length=36, null=True, blank=True)
+    deleted_by = models.CharField(max_length=36, null=True, blank=True)
+
+    log = models.TextField(default="init;")
+    version = models.IntegerField(default=1)
 
     class Meta:
         db_table = "material"
+        ordering = ["-created_at"]
 
     def __str__(self):
         return self.description
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = str(uuid.uuid4())
+        super().save(*args, **kwargs)
 
 
 # =========================
@@ -235,11 +297,19 @@ class Service(models.Model):
     obs = models.TextField()
     package_unit = models.IntegerField()
     min_package_purchase = models.IntegerField()
-    price = models.ForeignKey("price.Price", db_column="price", to_field="code", on_delete=models.PROTECT)
-    provider = models.ForeignKey(Provider, db_column="provider", on_delete=models.PROTECT)
+    price = models.ForeignKey(
+        "price.Price", db_column="price", to_field="code", on_delete=models.PROTECT
+    )
+    provider = models.ForeignKey(
+        Provider, db_column="provider", on_delete=models.PROTECT
+    )
     type = models.ForeignKey("ItemType", db_column="type", on_delete=models.PROTECT)
-    item_group = models.ForeignKey("ItemGroup", db_column="item_group", on_delete=models.PROTECT)
-    category = models.ForeignKey("ItemCategory", db_column="category", on_delete=models.PROTECT)
+    item_group = models.ForeignKey(
+        "ItemGroup", db_column="item_group", on_delete=models.PROTECT
+    )
+    category = models.ForeignKey(
+        "ItemCategory", db_column="category", on_delete=models.PROTECT
+    )
     url = models.CharField(max_length=255, null=True, blank=True)
     is_active = models.BooleanField(default=True)
 
@@ -269,6 +339,7 @@ class Menu(models.Model):
 
     def __str__(self):
         return self.menu
+
 
 class ItemGroup(models.Model):
     id = models.AutoField(primary_key=True)

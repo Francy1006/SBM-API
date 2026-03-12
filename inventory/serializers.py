@@ -10,7 +10,7 @@ from .models import (
     TransportType,
     MeasureUnit,
     Provider,
-    ProviderType
+    ProviderType,
 )
 
 
@@ -377,7 +377,6 @@ class ProviderSerializer(serializers.ModelSerializer):
         provider = Provider._default_manager.create(
             **validated_data,
             created_by=user_code,
-            obs_provider=validated_data.get("obs_provider", "") or "",
         )
         return provider
 
@@ -460,21 +459,69 @@ class ProviderSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             "obs_provider": {"required": False, "allow_blank": True},
-            "contact_name": {"required": False, "allow_null": True, "allow_blank": True},
-            "contact_mail": {"required": False, "allow_null": True, "allow_blank": True},
+            "contact_name": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "contact_mail": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
             "website_url": {"required": False, "allow_null": True, "allow_blank": True},
             "obs_contact": {"required": False, "allow_null": True, "allow_blank": True},
-            "company_name": {"required": False, "allow_null": True, "allow_blank": True},
+            "company_name": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
             "company_rut": {"required": False, "allow_null": True, "allow_blank": True},
-            "company_activity": {"required": False, "allow_null": True, "allow_blank": True},
-            "legal_representative": {"required": False, "allow_null": True, "allow_blank": True},
-            "billing_address": {"required": False, "allow_null": True, "allow_blank": True},
-            "billing_mail": {"required": False, "allow_null": True, "allow_blank": True},
-            "bank_account_number": {"required": False, "allow_null": True, "allow_blank": True},
-            "bank_account_mail": {"required": False, "allow_null": True, "allow_blank": True},
-            "dispatch_address": {"required": False, "allow_null": True, "allow_blank": True},
-            "dispatch_maps_location": {"required": False, "allow_null": True, "allow_blank": True},
-            "obs_dispatch": {"required": False, "allow_null": True, "allow_blank": True},
+            "company_activity": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "legal_representative": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "billing_address": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "billing_mail": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "bank_account_number": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "bank_account_mail": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "dispatch_address": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "dispatch_maps_location": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
+            "obs_dispatch": {
+                "required": False,
+                "allow_null": True,
+                "allow_blank": True,
+            },
         }
 
 
