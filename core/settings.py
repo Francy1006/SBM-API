@@ -73,9 +73,9 @@ INSTALLED_APPS = [
     "fiscal",  # Fiscal
     "inventory",  # Inventario
     "sales",  # Ventas
+    "module",  # Modulos
     "users",  # Usuarios
     "clients",  # Clientes
-    
 ]
 
 MIDDLEWARE = [
@@ -228,6 +228,7 @@ GOOGLE_CLIENT_ID = os.environ.get(
     "GOOGLE_CLIENT_ID",
     "815958124165-c4jtlvju3ngm68ecpgqf3k208tqd984f.apps.googleusercontent.com",
 )
+
 
 # Disable Django migrations for business apps - using Flyway instead
 # Enable migrations only for Django system apps

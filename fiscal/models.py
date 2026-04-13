@@ -35,8 +35,9 @@ class FiscalDocument(models.Model):
     
     # Relaciones
     franchise = models.ForeignKey('franchise.Franchise', on_delete=models.CASCADE, related_name='fiscal_documents', verbose_name="Franquicia")
-    customer = models.ForeignKey('sales.Customer', on_delete=models.CASCADE, related_name='fiscal_documents', verbose_name="Cliente")
+    client = models.ForeignKey('clients.Client', on_delete=models.CASCADE, related_name='fiscal_documents', verbose_name="Cliente")
     
+
     # Campos de auditoría
     created_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='created_fiscal_documents', verbose_name="Creado por")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")

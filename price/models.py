@@ -3,32 +3,6 @@ from django.db import models
 from django.contrib.auth.models import User
 
 
-class VariableFormula(models.Model):
-    id = models.AutoField(primary_key=True)
-    code = models.CharField(max_length=36, unique=True, null=True)
-    formula = models.CharField(max_length=50)
-    formula_template = models.TextField()
-    formula_translate = models.TextField()
-    price_variables = models.TextField(null=True, blank=True)
-    is_deleted = models.BooleanField(null=True)
-    is_confirmed = models.BooleanField(null=True)
-    created_at = models.DateTimeField(null=True)
-    updated_at = models.DateTimeField(null=True)
-    confirmed_at = models.DateTimeField(null=True)
-    deleted_at = models.DateTimeField(null=True)
-    created_by = models.CharField(max_length=36)
-    confirmed_by = models.CharField(max_length=36, null=True)
-    updated_by = models.CharField(max_length=36, null=True)
-    deleted_by = models.CharField(max_length=36, null=True)
-
-    class Meta:
-        db_table = 'sbm_business"."variable_formula'
-        managed = False
-
-    def __str__(self):
-        return self.formula
-
-
 class Price(models.Model):
     id = models.AutoField(primary_key=True)
     code = models.CharField(max_length=36, unique=True, null=True)
@@ -40,7 +14,6 @@ class Price(models.Model):
     aditional_tax_amount = models.IntegerField(default=0)
     retention_amount = models.IntegerField(default=0)
 
-    # 🔥 FK REAL (antes era CharField)
     price_configuration = models.ForeignKey(
         "PriceConfiguration",
         db_column="price_configuration",
@@ -53,23 +26,15 @@ class Price(models.Model):
     is_deleted = models.BooleanField(null=True, blank=True)
     is_confirmed = models.BooleanField(null=True, blank=True)
 
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(null=True, blank=True)
     created_by = models.CharField(max_length=36)
 
     record_item_code = models.CharField(max_length=36, null=True, blank=True)
     price_record_type = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        db_table = "price"
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return f"Precio {self.code}"
-
-    def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = str(uuid.uuid4())
-        super().save(*args, **kwargs)
+        db_table = 'ditaly_pasta"."price'
+        managed = False
 
 
 class PriceList(models.Model):
@@ -97,6 +62,7 @@ class PriceList(models.Model):
 
     def __str__(self):
         return self.name
+        
 
 
 class PriceItem(models.Model):
@@ -202,7 +168,7 @@ class PriceConfiguration(models.Model):
     franchise_configuration = models.CharField(max_length=36)
 
     variable_formula = models.ForeignKey(
-        VariableFormula,
+        "module.VariableFormula",
         to_field="code",
         db_column="variable_formula",
         on_delete=models.DO_NOTHING,
@@ -211,7 +177,7 @@ class PriceConfiguration(models.Model):
 
     is_deleted = models.BooleanField(null=True, blank=True)
     is_confirmed = models.BooleanField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(null=True, blank=True)
     confirmed_at = models.DateTimeField(null=True, blank=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -221,11 +187,8 @@ class PriceConfiguration(models.Model):
     deleted_by = models.CharField(max_length=36, null=True, blank=True)
 
     class Meta:
-        db_table = "price_configuration"
-        ordering = ["-created_at"]
-
-    def __str__(self):
-        return self.price_configuration
+        db_table = 'ditaly_pasta"."price_configuration'
+        managed = False
 
 
 class PriceTypeRecord(models.Model):

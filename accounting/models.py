@@ -39,9 +39,17 @@ class PriceFiscalConfiguration(models.Model):
 class FiscalConfigurationDetail(models.Model):
 
     id = models.AutoField(primary_key=True)
-    price_configuration = models.CharField(max_length=36)
+    module_id = models.IntegerField()
+    module_config_id = models.CharField(max_length=50)
     fiscal_directive = models.CharField(max_length=36)
     var = models.CharField(max_length=50)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.CharField(max_length=36, null=True, blank=True)
+    updated_by = models.CharField(max_length=36, null=True, blank=True)
+    deleted_by = models.CharField(max_length=36, null=True, blank=True)
 
     class Meta:
         db_table = '"ditaly_pasta"."fiscal_configuration_detail"'
@@ -49,68 +57,46 @@ class FiscalConfigurationDetail(models.Model):
 
 
 class FiscalDirectiveType(models.Model):
-    """
-    Modelo para tipos de directivas fiscales
-    """
     id = models.AutoField(primary_key=True)
-    type = models.CharField(max_length=255, verbose_name="Tipo")
-    description = models.TextField(verbose_name="Descripción")
+    type = models.CharField(max_length=255)
+    description = models.TextField()
 
     class Meta:
-        db_table = 'fiscal_directive_type'
-        verbose_name = "Tipo de Directiva Fiscal"
-        verbose_name_plural = "Tipos de Directivas Fiscales"
-        ordering = ['type']
-
-    def __str__(self):
-        return self.type
+        db_table = 'sbm_business"."fiscal_directive_type'
+        managed = False
 
 
 class FiscalDirective(models.Model):
-    """
-    Modelo para directivas fiscales
-    """
     id = models.AutoField(primary_key=True)
-    code = models.CharField(max_length=36, unique=True, verbose_name="Código UUID")
-    obs = models.TextField(null=True, blank=True, verbose_name="Observaciones")
-    fiscal_directive = models.CharField(max_length=50, unique=True, verbose_name="Directiva Fiscal")
+    code = models.CharField(max_length=36, unique=True)
+    obs = models.TextField(null=True, blank=True)
+    fiscal_directive = models.CharField(max_length=50, unique=True)
     type = models.ForeignKey(
         FiscalDirectiveType,
-        on_delete=models.PROTECT,
+        on_delete=models.DO_NOTHING,
         db_column='type',
-        verbose_name="Tipo de Directiva Fiscal",
         related_name='fiscal_directives'
     )
-    value = models.DecimalField(max_digits=10, decimal_places=2, default=0, verbose_name="Valor")
-    official_source_url = models.CharField(max_length=255, verbose_name="URL de Fuente Oficial")
-    is_deleted = models.BooleanField(null=True, blank=True, verbose_name="Está Eliminado")
-    is_confirmed = models.BooleanField(null=True, blank=True, verbose_name="Está Confirmado")
-    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de Creación")
-    updated_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Actualización")
-    confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Confirmación")
-    deleted_at = models.DateTimeField(null=True, blank=True, verbose_name="Fecha de Eliminación")
-    created_by = models.CharField(max_length=36, verbose_name="Creado Por")
-    confirmed_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Confirmado Por")
-    updated_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Actualizado Por")
-    deleted_by = models.CharField(max_length=36, null=True, blank=True, verbose_name="Eliminado Por")
-    month = models.IntegerField(null=True, blank=True, verbose_name="Mes Inicio")
-    end_month = models.IntegerField(null=True, blank=True, verbose_name="Mes Fin")
-    year = models.IntegerField(verbose_name="Año Inicio")
-    end_year = models.IntegerField(null=True, blank=True, verbose_name="Año Fin")
+    value = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    official_source_url = models.CharField(max_length=255)
+    is_deleted = models.BooleanField(null=True, blank=True)
+    is_confirmed = models.BooleanField(null=True, blank=True)
+    created_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(null=True, blank=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.CharField(max_length=36)
+    confirmed_by = models.CharField(max_length=36, null=True, blank=True)
+    updated_by = models.CharField(max_length=36, null=True, blank=True)
+    deleted_by = models.CharField(max_length=36, null=True, blank=True)
+    month = models.IntegerField(null=True, blank=True)
+    end_month = models.IntegerField(null=True, blank=True)
+    year = models.IntegerField()
+    end_year = models.IntegerField(null=True, blank=True)
 
     class Meta:
-        db_table = 'fiscal_directive'
-        verbose_name = "Directiva Fiscal"
-        verbose_name_plural = "Directivas Fiscales"
-        ordering = ['fiscal_directive']
-
-    def __str__(self):
-        return self.fiscal_directive
-
-    def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = str(uuid.uuid4())
-        super().save(*args, **kwargs)
+        db_table = 'sbm_business"."fiscal_directive'
+        managed = False
 
 
 class FiscalFormula(models.Model):

@@ -141,9 +141,12 @@ class Status(models.Model):
     created_at = models.DateTimeField()
 
     class Meta:
-        db_table = "status"
+        db_table = 'status'
         managed = False
         ordering = ["id"]
 
     def __str__(self):
         return f"{self.module} - {self.name}"
+
+
+        

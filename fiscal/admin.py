@@ -4,9 +4,9 @@ from .models import FiscalDocument, FiscalItem, TaxRate, FiscalPayment
 
 @admin.register(FiscalDocument)
 class FiscalDocumentAdmin(admin.ModelAdmin):
-    list_display = ['document_number', 'document_type', 'status', 'total_amount', 'franchise', 'customer', 'issue_date']
+    list_display = ['document_number', 'document_type', 'status', 'total_amount', 'franchise', 'client', 'issue_date']
     list_filter = ['document_type', 'status', 'franchise', 'issue_date']
-    search_fields = ['document_number', 'customer__name', 'franchise__name']
+    search_fields = ['document_number', 'client__name', 'franchise__name']
     readonly_fields = ['id', 'document_number', 'created_at', 'updated_at']
     date_hierarchy = 'issue_date'
     ordering = ['-issue_date']
@@ -22,7 +22,7 @@ class FiscalDocumentAdmin(admin.ModelAdmin):
             'fields': ('issue_date', 'due_date')
         }),
         ('Relaciones', {
-            'fields': ('franchise', 'customer', 'created_by')
+            'fields': ('franchise', 'client', 'created_by')
         }),
         ('Auditoría', {
             'fields': ('created_at', 'updated_at'),

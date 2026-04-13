@@ -36,8 +36,8 @@ class PriceFiscalConfigurationAdmin(admin.ModelAdmin):
 
 @admin.register(FiscalConfigurationDetail)
 class FiscalConfigurationDetailAdmin(admin.ModelAdmin):
-    list_display = ['id', 'price_configuration', 'fiscal_directive', 'var']
-    list_filter = ['price_configuration', 'fiscal_directive']
+    list_display = ['id', 'fiscal_directive', 'var']
+    list_filter = ['fiscal_directive']
     readonly_fields = ['id']
     ordering = ['id']
 

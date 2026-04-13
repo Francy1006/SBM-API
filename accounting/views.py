@@ -8,11 +8,11 @@ from django.db import connection
 from price.models import Price
 from .models import (
     PriceFiscalConfiguration, FiscalConfigurationDetail,
-    FiscalDirective, FiscalDirectiveType, FiscalFormula, FiscalDirectiveStats
+    FiscalDirective, FiscalDirectiveType, FiscalFormula
 )
 from .serializers import (
-    PriceSerializer, PriceFiscalConfigurationSerializer, FiscalConfigurationDetailSerializer,
-    FiscalDirectiveSerializer, FiscalDirectiveTypeSerializer, FiscalFormulaSerializer, FiscalDirectiveStatsSerializer
+    PriceSerializer, FiscalConfigurationDetailSerializer,
+    FiscalDirectiveSerializer, FiscalDirectiveTypeSerializer, FiscalFormulaSerializer
 )
 
 
@@ -43,7 +43,7 @@ class PriceFiscalConfigurationViewSet(viewsets.ModelViewSet):
     ViewSet para el modelo PriceFiscalConfiguration
     """
     queryset = PriceFiscalConfiguration.objects.all()  # type: ignore
-    serializer_class = PriceFiscalConfigurationSerializer
+    serializer_class = None
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['is_deleted', 'is_confirmed']
     search_fields = ['fiscal_configuration', 'fiscal_formula']
@@ -52,22 +52,16 @@ class PriceFiscalConfigurationViewSet(viewsets.ModelViewSet):
 
 
 class FiscalConfigurationDetailViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para el modelo FiscalConfigurationDetail
-    """
     queryset = FiscalConfigurationDetail.objects.all()  # type: ignore
     serializer_class = FiscalConfigurationDetailSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
-    filterset_fields = ['price_fiscal_configuration', 'price', 'fiscal_directive']
-    search_fields = ['log']
+    filterset_fields = ['module_id', 'module_config_id', 'fiscal_directive', 'is_active']
+    search_fields = ['var']
     ordering_fields = ['id']
     ordering = ['id']
 
 
 class FiscalDirectiveViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet para el modelo FiscalDirective
-    """
     queryset = FiscalDirective.objects.all()  # type: ignore
     serializer_class = FiscalDirectiveSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -80,23 +74,16 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
         if hasattr(self.request.user, 'code'):
             serializer.save(created_by=self.request.user.code)
         else:
-            # Fallback si el usuario no tiene código
             serializer.save(created_by='system')
 
     @action(detail=False, methods=['get'])
     def active(self, request):
-        """
-        Endpoint para obtener solo directivas activas
-        """
         queryset = self.get_queryset().filter(is_deleted=False)
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'])
     def by_type(self, request):
-        """
-        Endpoint para filtrar directivas por tipo
-        """
         type_id = request.query_params.get('type_id')
         if type_id:
             queryset = self.get_queryset().filter(type=type_id, is_deleted=False)
@@ -108,9 +95,6 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def stats(self, request):
-        """
-        Endpoint para obtener estadísticas de directivas fiscales por tipo
-        """
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT 
@@ -121,9 +105,9 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
                     COUNT(CASE WHEN fd.is_confirmed = true THEN 1 END) AS confirmed_directives,
                     COUNT(CASE WHEN fd.is_deleted = true THEN 1 END) AS deleted_directives,
                     COUNT(CASE WHEN fd.is_confirmed IS NULL THEN 1 END) AS pending_directives,
-                    AVG(fd.percentage) AS avg_percentage,
-                    MIN(fd.percentage) AS min_percentage,
-                    MAX(fd.percentage) AS max_percentage,
+                    AVG(fd.value) AS avg_value,
+                    MIN(fd.value) AS min_value,
+                    MAX(fd.value) AS max_value,
                     COUNT(CASE WHEN fd.year = EXTRACT(YEAR FROM CURRENT_DATE) THEN 1 END) AS current_year_directives,
                     COUNT(CASE WHEN fd.month IS NOT NULL THEN 1 END) AS directives_with_month,
                     COUNT(CASE WHEN fd.end_month IS NOT NULL THEN 1 END) AS directives_with_end_month,
@@ -143,9 +127,6 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def summary(self, request):
-        """
-        Endpoint para obtener resumen general de directivas fiscales
-        """
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT 
@@ -156,9 +137,9 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
                     COUNT(CASE WHEN is_confirmed IS NULL THEN 1 END) AS pending_directives,
                     COUNT(DISTINCT type) AS unique_types,
                     COUNT(DISTINCT year) AS unique_years,
-                    AVG(percentage) AS avg_percentage,
-                    MIN(percentage) AS min_percentage,
-                    MAX(percentage) AS max_percentage
+                    AVG(value) AS avg_value,
+                    MIN(value) AS min_value,
+                    MAX(value) AS max_value
                 FROM sbm_business.fiscal_directive
 
                 UNION ALL
@@ -171,9 +152,9 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
                     COUNT(CASE WHEN is_confirmed IS NULL THEN 1 END) AS pending_directives,
                     COUNT(DISTINCT type) AS unique_types,
                     COUNT(DISTINCT year) AS unique_years,
-                    AVG(percentage) AS avg_percentage,
-                    MIN(percentage) AS min_percentage,
-                    MAX(percentage) AS max_percentage
+                    AVG(value) AS avg_value,
+                    MIN(value) AS min_value,
+                    MAX(value) AS max_value
                 FROM sbm_business.fiscal_directive
                 WHERE is_deleted IS NULL OR is_deleted = false
             """)
@@ -183,9 +164,6 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'])
     def by_year(self, request):
-        """
-        Endpoint para obtener estadísticas de directivas fiscales por año
-        """
         with connection.cursor() as cursor:
             cursor.execute("""
                 SELECT 
@@ -195,9 +173,9 @@ class FiscalDirectiveViewSet(viewsets.ModelViewSet):
                     COUNT(CASE WHEN is_deleted = true THEN 1 END) AS deleted_directives,
                     COUNT(CASE WHEN is_confirmed IS NULL THEN 1 END) AS pending_directives,
                     COUNT(DISTINCT type) AS unique_types,
-                    AVG(percentage) AS avg_percentage,
-                    MIN(percentage) AS min_percentage,
-                    MAX(percentage) AS max_percentage
+                    AVG(value) AS avg_value,
+                    MIN(value) AS min_value,
+                    MAX(value) AS max_value
                 FROM sbm_business.fiscal_directive
                 GROUP BY year
                 ORDER BY year DESC

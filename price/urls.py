@@ -22,9 +22,7 @@ router.register(
     r"price-configurations", PriceConfigurationViewSet, basename="price-configuration"
 )
 
-
 urlpatterns = [
-    path("", include(router.urls)),
     path("price-formula/", PriceFormulaView.as_view(), name="price-formula"),
     path(
         "price-configuration-formula/",
@@ -42,4 +40,5 @@ urlpatterns = [
         ProductPriceHistoryView.as_view(),
         name="product-price-history",
     ),
+    path("", include(router.urls)),
 ]

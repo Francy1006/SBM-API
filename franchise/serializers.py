@@ -80,23 +80,44 @@ class FranchiseConfigurationSerializer(serializers.ModelSerializer):
 
 
 class FranchiseConfigurationDetailSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo FranchiseConfigurationDetail
-    """
     type_name = serializers.CharField(source='type.configuration_type', read_only=True)
     field_verbose_names = serializers.SerializerMethodField()
 
     class Meta:
         model = FranchiseConfigurationDetail
         fields = [
-            'id', 'code', 'detail', 'description', 'type', 'type_name', 'configuration',
-            'index', 'var', 'value', 'is_deleted', 'is_confirmed', 'created_at', 'updated_at',
-            'confirmed_at', 'deleted_at', 'created_by', 'confirmed_by', 'updated_by',
-            'deleted_by', 'field_verbose_names'
+            'id',
+            'code',
+            'detail',
+            'description',
+            'type',
+            'type_name',
+            'configuration',
+            'variable_formula',
+            'index',
+            'var',
+            'value',
+            'is_deleted',
+            'is_confirmed',
+            'created_at',
+            'updated_at',
+            'confirmed_at',
+            'deleted_at',
+            'created_by',
+            'confirmed_by',
+            'updated_by',
+            'deleted_by',
+            'field_verbose_names'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at', 'created_by']
+        read_only_fields = [
+            'id',
+            'created_at',
+            'updated_at',
+            'confirmed_at',
+            'deleted_at',
+            'created_by'
+        ]
 
     def get_field_verbose_names(self, obj):
         return {field.name: field.verbose_name for field in obj._meta.fields}
-
 

@@ -156,11 +156,30 @@ class PriceHistorySerializer(serializers.ModelSerializer):
 
 
 class PriceConfigurationSerializer(serializers.ModelSerializer):
+
     class Meta:
         model = PriceConfiguration
         fields = [
-            'id', 'code', 'price_configuration', 'franchise_configuration', 'variable_formula',
-            'is_deleted', 'is_confirmed', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at',
-            'created_by', 'confirmed_by', 'updated_by', 'deleted_by'
+            'id',
+            'code',
+            'price_configuration',
+            'franchise_configuration',
+            'variable_formula',
+            'is_deleted',
+            'is_confirmed',
+            'created_at',
+            'updated_at',
+            'confirmed_at',
+            'deleted_at',
+            'created_by',
+            'confirmed_by',
+            'updated_by',
+            'deleted_by'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at'] 
+        read_only_fields = [
+            'id',
+            'created_at',
+            'updated_at',
+            'confirmed_at',
+            'deleted_at'
+        ]

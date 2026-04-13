@@ -7,7 +7,6 @@ from .views import (
     FranchiseConfigurationView
 )
 
-# Crear el router para los ViewSets
 router = DefaultRouter()
 router.register(r'franchise-states', FranchiseStateViewSet, basename='franchise-state')
 router.register(r'franchises', FranchiseViewSet, basename='franchise')
@@ -18,7 +17,6 @@ router.register(r'franchise-configuration-details', FranchiseConfigurationDetail
 app_name = 'franchise'
 
 urlpatterns = [
-    # Incluir todas las rutas del router
+    path('franchise-configuration/raw/', FranchiseConfigurationView.as_view(), name='franchise-configuration-raw'),
     path('', include(router.urls)),
-    path('franchise-configuration/', FranchiseConfigurationView.as_view(), name='franchise-configuration'),
-] 
+]
