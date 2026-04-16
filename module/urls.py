@@ -7,7 +7,7 @@ from .views import (
     VariableFormulaViewSet,
     ModuleOrderFormulaView,
     ModuleOrderFormulaDetailView,
-    ModuleOrderVariableView,
+    ModuleOrderVariablesView,  # <-- FIX (antes: ModuleOrderVariableView)
 )
 
 router = DefaultRouter()
@@ -20,5 +20,5 @@ urlpatterns = [
 
     path("module-order-formula/", ModuleOrderFormulaView.as_view()),
     path("module-order-formula-detail/", ModuleOrderFormulaDetailView.as_view()),
-    path("module-order-variables/", ModuleOrderVariableView.as_view()),
+    path("module-order-variables/", ModuleOrderVariablesView.as_view()),
 ]

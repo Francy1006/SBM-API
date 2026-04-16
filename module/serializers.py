@@ -22,7 +22,10 @@ class OrderConfigTypeSerializer(serializers.ModelSerializer):
 
 class ModuleOrderConfigSerializer(serializers.ModelSerializer):
     order_config_type = OrderConfigTypeSerializer(read_only=True)
-    variable_formula = serializers.CharField(source="variable_formula.code", read_only=True)
+    variable_formula = serializers.SlugRelatedField(
+        read_only=True,
+        slug_field="code"
+    )
 
     class Meta:
         model = ModuleOrderConfig

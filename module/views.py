@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import viewsets
 
 from .models import Module, ModuleOrderConfig, VariableFormula
+from accounting.models import FiscalConfigurationDetail, FiscalDirective
 from .serializers import (
     ModuleSerializer,
     ModuleOrderConfigSerializer,
@@ -16,7 +17,9 @@ class ModuleViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class ModuleOrderConfigViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = ModuleOrderConfig.objects.select_related("order_config_type").all()
+    queryset = ModuleOrderConfig.objects.select_related(
+        "order_config_type", "variable_formula"
+    ).all()
     serializer_class = ModuleOrderConfigSerializer
 
 
@@ -27,80 +30,87 @@ class VariableFormulaViewSet(viewsets.ReadOnlyModelViewSet):
 
 class ModuleOrderFormulaView(APIView):
     def get(self, request):
-        t = request.query_params.get("type")
+        t = request.query_params.get("type", "").strip()
         if not t:
             return Response({"code": None})
 
         config = (
-            ModuleOrderConfig.objects.select_related("order_config_type")
-            .filter(
-                order_config_type__type__iexact=t,
-                is_active=True,
+            ModuleOrderConfig.objects.select_related(
+                "order_config_type",
+                "variable_formula",
             )
+            .filter(order_config_type__type=t)
+            .order_by("-id")
             .first()
         )
 
-        return Response({"code": config.variable_formula.code if config else None})
-
+        return Response(
+            {
+                "code": (
+                    config.variable_formula.code
+                    if config and config.variable_formula
+                    else None
+                )
+            }
+        )
 
 class ModuleOrderFormulaDetailView(APIView):
     def get(self, request):
         code = request.query_params.get("code")
+
         if not code:
-            return Response({"error": "El parámetro code es requerido."}, status=400)
-
-        formula = VariableFormula.objects.filter(code=code).first()
-        if not formula:
-            return Response({"error": "Fórmula no encontrada."}, status=400)
-
-        return Response(
-            {
-                "code": formula.code,
-                "formula": formula.formula,
-                "formula_template": formula.formula_template,
-                "formula_translate": formula.formula_translate,
-            }
-        )
-
-
-class ModuleOrderVariableView(APIView):
-    def get(self, request):
-        module_code = request.query_params.get("module_code")
-        module_config_id = request.query_params.get("module_config_id")
-
-        if not module_code or not module_config_id:
             return Response(
-                {
-                    "error": "Los parámetros module_code y module_config_id son requeridos."
-                },
-                status=400,
+                {"error": "El parámetro code es requerido."},
+                status=400
             )
 
-        module = Module.objects.filter(code=module_code, is_active=True).first()
-        if not module:
-            return Response({"error": "Módulo no encontrado."}, status=400)
+        config = ModuleOrderConfig.objects.select_related(
+            "order_config_type",
+            "variable_formula"
+        ).filter(
+            variable_formula__code=code,
+            is_active=True
+        ).first()
 
-        from accounting.models import FiscalConfigurationDetail, FiscalDirective
+        if not config or not config.variable_formula:
+            return Response(
+                {"error": "Configuración o fórmula no encontrada."},
+                status=400
+            )
 
-        fiscal_details = FiscalConfigurationDetail.objects.filter(
-            module_id=module.id,
-            module_config_id=module_config_id,
-            is_active=True,
+        formula = config.variable_formula
+
+        return Response({
+            "code": formula.code,
+            "formula": formula.formula,
+            "formula_template": formula.formula_template,
+            "formula_translate": formula.formula_translate,
+            "order_config_type": config.order_config_type.type
+        })
+
+class ModuleOrderVariablesView(APIView):
+    def get(self, request):
+        qs = FiscalConfigurationDetail.objects.filter(
+            module_id=2,
+            is_active=True
+        ).values(
+            "id",
+            "module_id",
+            "module_config_id",
+            "fiscal_directive",
+            "var",
         )
 
-        directive_codes = fiscal_details.values_list("fiscal_directive", flat=True)
-        directives = FiscalDirective.objects.filter(code__in=directive_codes)
-        directive_map = {d.code: d for d in directives}
+        directives = {
+            d["code"]: d["value"]
+            for d in FiscalDirective.objects.filter(
+                code__in=[q["fiscal_directive"] for q in qs]
+            ).values("code", "value")
+        }
 
-        data = []
-        for detail in fiscal_details:
-            directive = directive_map.get(detail.fiscal_directive)
-            if directive:
-                data.append(
-                    {
-                        "var": detail.var,
-                        "value": directive.value,
-                    }
-                )
+        result = []
+        for q in qs:
+            q["value"] = directives.get(q["fiscal_directive"])
+            result.append(q)
 
-        return Response(data)
+        return Response(result)

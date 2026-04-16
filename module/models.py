@@ -3,7 +3,7 @@ from django.db import models
 
 class VariableFormula(models.Model):
     id = models.AutoField(primary_key=True)
-    code = models.CharField(max_length=36, unique=True, null=True)
+    code = models.CharField(max_length=36, unique=True, null=False)
     formula = models.CharField(max_length=50)
     formula_template = models.TextField()
     formula_translate = models.TextField()
@@ -67,7 +67,6 @@ class ModuleOrderConfig(models.Model):
         on_delete=models.DO_NOTHING,
         related_name="module_order_configs",
     )
-
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(null=True, blank=True)
