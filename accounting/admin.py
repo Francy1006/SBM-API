@@ -1,11 +1,9 @@
 from django.contrib import admin
 from price.models import Price
 from .models import (
-    PriceFiscalConfiguration,
     FiscalConfigurationDetail,
     FiscalDirective,
     FiscalDirectiveType,
-    FiscalFormula
 )
 
 
@@ -18,26 +16,11 @@ class PriceAdmin(admin.ModelAdmin):
     ordering = ['-created_at']
 
 
-@admin.register(PriceFiscalConfiguration)
-class PriceFiscalConfigurationAdmin(admin.ModelAdmin):
-    list_display = [
-        'id',
-        'fiscal_configuration',
-        'fiscal_formula',
-        'is_deleted',
-        'is_confirmed',
-        'created_at'
-    ]
-    list_filter = ['is_deleted', 'is_confirmed']
-    search_fields = ['fiscal_configuration', 'fiscal_formula']
-    readonly_fields = ['id', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
-    ordering = ['fiscal_configuration']
-
-
 @admin.register(FiscalConfigurationDetail)
 class FiscalConfigurationDetailAdmin(admin.ModelAdmin):
-    list_display = ['id', 'fiscal_directive', 'var']
-    list_filter = ['fiscal_directive']
+    list_display = ['id', 'module_id', 'module_config_id', 'fiscal_directive', 'var', 'is_active']
+    list_filter = ['module_id', 'fiscal_directive', 'is_active']
+    search_fields = ['module_config_id', 'var']
     readonly_fields = ['id']
     ordering = ['id']
 
@@ -50,11 +33,13 @@ class FiscalDirectiveAdmin(admin.ModelAdmin):
         'fiscal_directive',
         'type',
         'value',
+        'year',
+        'month',
         'is_deleted',
         'is_confirmed',
         'created_at'
     ]
-    list_filter = ['is_deleted', 'is_confirmed', 'type']
+    list_filter = ['is_deleted', 'is_confirmed', 'type', 'year']
     search_fields = ['fiscal_directive', 'code', 'obs']
     readonly_fields = ['id', 'code']
     ordering = ['fiscal_directive']
@@ -62,15 +47,6 @@ class FiscalDirectiveAdmin(admin.ModelAdmin):
 
 @admin.register(FiscalDirectiveType)
 class FiscalDirectiveTypeAdmin(admin.ModelAdmin):
-    list_display = ['id', 'type']
+    list_display = ['id', 'type', 'description']
     search_fields = ['type', 'description']
     ordering = ['type']
-
-
-@admin.register(FiscalFormula)
-class FiscalFormulaAdmin(admin.ModelAdmin):
-    list_display = ['id', 'formula', 'is_deleted', 'is_confirmed', 'created_at']
-    list_filter = ['is_deleted', 'is_confirmed']
-    search_fields = ['formula', 'formula_template']
-    readonly_fields = ['id', 'created_at', 'updated_at', 'confirmed_at', 'deleted_at']
-    ordering = ['formula']

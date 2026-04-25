@@ -9,7 +9,6 @@ from .views import (
     PriceConfigurationViewSet,
     PriceConfigurationFormulaView,
     PriceCalculationFormulaView,
-    VariableFormulaView,
     ProductPriceHistoryView,
 )
 
@@ -28,12 +27,6 @@ urlpatterns = [
         "price-configuration-formula/",
         PriceConfigurationFormulaView.as_view(),
         name="price-configuration-formula",
-    ),
-    path("formula-variables/", VariableFormulaView.as_view(), name="formula-variables"),
-    path(
-        "product-price-calculation/",
-        PriceCalculationFormulaView.as_view(),
-        name="product-price-calculation",
     ),
     path(
         "product/prices/<str:sku>/",

@@ -20,6 +20,7 @@ services:
       - ./sales:/usr/src/app/sales
       - ./users:/usr/src/app/users
       - ./templates:/usr/src/app/templates
+      - ./calculation:/usr/src/app/calculation
       - ./module:/usr/src/app/module
       - ./clients:/usr/src/app/clients
       - ./manage.py:/usr/src/app/manage.py

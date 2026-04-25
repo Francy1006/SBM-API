@@ -1,11 +1,9 @@
 from rest_framework import serializers
 from price.models import Price
 from .models import (
-    PriceFiscalConfiguration,
     FiscalConfigurationDetail,
     FiscalDirective,
     FiscalDirectiveType,
-    FiscalFormula,
     FiscalDirectiveStats,
 )
 
@@ -34,20 +32,17 @@ class PriceSerializer(serializers.ModelSerializer):
             "price_record_type",
             "field_verbose_names",
         ]
-
         read_only_fields = [
             "id",
             "code",
             "created_at",
-            "created_by",  # 🔥 IMPORTANTE
+            "created_by",
         ]
 
     def create(self, validated_data):
         request = self.context.get("request")
         user_code = getattr(getattr(request, "user", None), "code", None)
-
         validated_data["created_by"] = user_code
-
         return super().create(validated_data)
 
     def get_field_verbose_names(self, obj):
@@ -59,23 +54,17 @@ class FiscalConfigurationDetailSerializer(serializers.ModelSerializer):
         model = FiscalConfigurationDetail
         fields = [
             "id",
-            "module_id",
+            "module",
             "module_config_id",
             "fiscal_directive",
             "var",
+            "data_type",
             "is_active",
         ]
         read_only_fields = ["id"]
 
-    def get_field_verbose_names(self, obj):
-        return {field.name: field.verbose_name for field in obj._meta.fields}
-
 
 class FiscalDirectiveTypeSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo FiscalDirectiveType
-    """
-
     field_verbose_names = serializers.SerializerMethodField()
 
     class Meta:
@@ -88,10 +77,6 @@ class FiscalDirectiveTypeSerializer(serializers.ModelSerializer):
 
 
 class FiscalDirectiveSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo FiscalDirective
-    """
-
     field_verbose_names = serializers.SerializerMethodField()
 
     class Meta:
@@ -134,48 +119,7 @@ class FiscalDirectiveSerializer(serializers.ModelSerializer):
         return {field.name: field.verbose_name for field in obj._meta.fields}
 
 
-class FiscalFormulaSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo FiscalFormula
-    """
-
-    field_verbose_names = serializers.SerializerMethodField()
-
-    class Meta:
-        model = FiscalFormula
-        fields = [
-            "id",
-            "formula",
-            "formula_template",
-            "is_deleted",
-            "is_confirmed",
-            "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
-            "created_by",
-            "confirmed_by",
-            "updated_by",
-            "deleted_by",
-            "field_verbose_names",
-        ]
-        read_only_fields = [
-            "id",
-            "created_at",
-            "updated_at",
-            "confirmed_at",
-            "deleted_at",
-        ]
-
-    def get_field_verbose_names(self, obj):
-        return {field.name: field.verbose_name for field in obj._meta.fields}
-
-
 class FiscalDirectiveStatsSerializer(serializers.ModelSerializer):
-    """
-    Serializer para el modelo FiscalDirectiveStats
-    """
-
     field_verbose_names = serializers.SerializerMethodField()
 
     class Meta:
@@ -205,9 +149,3 @@ class FiscalDirectiveStatsSerializer(serializers.ModelSerializer):
 
     def get_field_verbose_names(self, obj):
         return {field.name: field.verbose_name for field in obj._meta.fields}
-
-
-class PriceFiscalConfigurationSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = PriceFiscalConfiguration
-        fields = "__all__"

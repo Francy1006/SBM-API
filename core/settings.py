@@ -73,6 +73,7 @@ INSTALLED_APPS = [
     "fiscal",  # Fiscal
     "inventory",  # Inventario
     "sales",  # Ventas
+    "calculation",  # Calculos y formulas
     "module",  # Modulos
     "users",  # Usuarios
     "clients",  # Clientes
@@ -242,7 +243,10 @@ MIGRATION_MODULES = {
     "fiscal": None,  # Desactivar migraciones para usar Flyway
     "inventory": None,  # Desactivar migraciones para usar Flyway
     "sales": None,  # Desactivar migraciones para usar Flyway
+    "calculation": None,  # Desactivar migraciones para usar Flyway
+    "module": None,  # Desactivar migraciones para usar Flyway
     "users": None,  # Desactivar migraciones para usar Flyway
+    "clients": None,  # Desactivar migraciones para usar Flyway
     # Django system apps - migrations enabled
     # 'admin': None,  # Comentado para permitir migraciones
     # 'auth': None,   # Comentado para permitir migraciones

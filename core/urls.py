@@ -19,6 +19,7 @@ from django.urls import path, include
 from rest_framework.authtoken import views as auth_views
 # from rest_framework.documentation import include_docs_urls
 from . import views
+from calculation.views import VariableFormulaView
 
 urlpatterns = [
     # Vista principal
@@ -49,6 +50,8 @@ urlpatterns = [
     path('api/', include('fiscal.urls')),
     path('api/', include('inventory.urls')),
     path('api/', include('clients.urls')),
+    path('api/formula-variables/', VariableFormulaView.as_view(), name='formula-variables'),
+    path('api/calculation/', include('calculation.urls')),
     path('api/', include('module.urls')),
     path('api/users/', include('users.urls')),
     # path('docs/', include_docs_urls(title='SBM API Documentation')),

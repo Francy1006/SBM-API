@@ -2,11 +2,13 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import viewsets
 
-from .models import Module, ModuleOrderConfig, VariableFormula
+from calculation.models import VariableFormula
+from .models import Module, ModuleOrderConfig, ModuleOrderCalculationDetail
 from accounting.models import FiscalConfigurationDetail, FiscalDirective
 from .serializers import (
     ModuleSerializer,
     ModuleOrderConfigSerializer,
+    ModuleOrderCalculationDetailSerializer,
     VariableFormulaSerializer,
 )
 
@@ -21,6 +23,14 @@ class ModuleOrderConfigViewSet(viewsets.ReadOnlyModelViewSet):
         "order_config_type", "variable_formula"
     ).all()
     serializer_class = ModuleOrderConfigSerializer
+
+
+class ModuleOrderCalculationDetailViewSet(viewsets.ModelViewSet):
+    queryset = ModuleOrderCalculationDetail.objects.select_related(
+        "module_config_type",
+        "calculation_concept",
+    ).all()
+    serializer_class = ModuleOrderCalculationDetailSerializer
 
 
 class VariableFormulaViewSet(viewsets.ReadOnlyModelViewSet):

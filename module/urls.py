@@ -4,6 +4,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ModuleViewSet,
     ModuleOrderConfigViewSet,
+    ModuleOrderCalculationDetailViewSet,
     VariableFormulaViewSet,
     ModuleOrderFormulaView,
     ModuleOrderFormulaDetailView,
@@ -13,6 +14,11 @@ from .views import (
 router = DefaultRouter()
 router.register(r"module", ModuleViewSet)
 router.register(r"module-order-configs", ModuleOrderConfigViewSet)
+router.register(
+    r"module-order-calculation-details",
+    ModuleOrderCalculationDetailViewSet,
+    basename="module-order-calculation-detail",
+)
 router.register(r"variable-formulas", VariableFormulaViewSet)
 
 urlpatterns = [

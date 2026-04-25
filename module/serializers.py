@@ -1,5 +1,11 @@
 from rest_framework import serializers
-from .models import VariableFormula, Module, ModuleOrderConfig, OrderConfigType
+from calculation.models import VariableFormula
+from .models import (
+    Module,
+    ModuleOrderConfig,
+    OrderConfigType,
+    ModuleOrderCalculationDetail,
+)
 
 
 class VariableFormulaSerializer(serializers.ModelSerializer):
@@ -29,4 +35,10 @@ class ModuleOrderConfigSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ModuleOrderConfig
+        fields = "__all__"
+
+
+class ModuleOrderCalculationDetailSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ModuleOrderCalculationDetail
         fields = "__all__"

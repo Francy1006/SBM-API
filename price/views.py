@@ -10,7 +10,7 @@ from rest_framework.views import APIView
 from catalog.models import Catalog, Product, Material, Service
 from price.models import Price
 from accounting.models import FiscalConfigurationDetail
-from module.models import Module, ModuleOrderConfig, VariableFormula
+from module.models import Module, ModuleOrderConfig
 
 from .models import (
     PriceList,
@@ -18,6 +18,7 @@ from .models import (
     PriceDiscount,
     PriceHistory,
     PriceConfiguration,
+    PriceConfigurationDetail,
 )
 from .serializers import (
     PriceListSerializer,
@@ -141,21 +142,43 @@ class PriceFormulaView(APIView):
 class PriceConfigurationFormulaView(APIView):
     def get(self, request):
         code = request.query_params.get("code")
+
         if not code or code in ["null", "None", "undefined"]:
             return Response({"error": "El parámetro code es requerido."}, status=400)
 
         price_config = (
-            PriceConfiguration.objects.select_related("variable_formula")
+            PriceConfiguration.objects
+            .select_related("variable_formula")
             .filter(code=code)
             .first()
         )
 
         if not price_config:
             return Response(
-                {"error": "Configuración de precio no encontrada."}, status=400
+                {"error": "Configuración de precio no encontrada."},
+                status=400
             )
 
         vf = price_config.variable_formula
+
+        # 🔥 DETAILS (LABELS + DATATYPE + KEY)
+        details = (
+            PriceConfigurationDetail.objects
+            .select_related("calculation_concept")
+            .filter(
+                price_configuration=code,
+                is_active=True
+            )
+        )
+
+        detail_map = [
+            {
+                "field": d.calculation_concept.field_name,
+                "label": d.calculation_concept.description,
+                "data_type": d.format_type
+            }
+            for d in details
+        ]
 
         return Response(
             [
@@ -163,6 +186,7 @@ class PriceConfigurationFormulaView(APIView):
                     "price_configuration": price_config.price_configuration,
                     "formula_template": vf.formula_template if vf else None,
                     "formula_translate": vf.formula_translate if vf else None,
+                    "details": detail_map  # 🔥 CLAVE
                 }
             ]
         )
@@ -174,7 +198,6 @@ class PriceCalculationFormulaView(APIView):
     def evaluate_formula(
         self, price_configuration_code, base_net_amount, variables=None
     ):
-
         from accounting.models import FiscalDirective
 
         price_config = (
@@ -193,7 +216,8 @@ class PriceCalculationFormulaView(APIView):
         context = {"base_net_amount": float(base_net_amount)}
 
         fiscal_details = FiscalConfigurationDetail.objects.filter(
-            module_config_id=price_configuration_code
+            module_config_id=price_configuration_code,
+            is_active=True,
         )
 
         directive_codes = fiscal_details.values_list("fiscal_directive", flat=True)
@@ -228,19 +252,12 @@ class PriceCalculationFormulaView(APIView):
             raw_label = raw_label.strip()
             expr = expr.strip()
 
-            if ":" in raw_label:
-                label, _ = raw_label.split(":", 1)
-                label = label.strip()
-            else:
-                label = raw_label
+            label = raw_label.split(":")[0].strip()
 
-            for var, value in context.items():
-                import re
-
-                expr = re.sub(r"\$\{[^\}]+\}", "0", expr)
+            expr = re.sub(r"\$\{[^\}]+\}", "0", expr)
 
             try:
-                value = eval(expr, {"__builtins__": None}, {})
+                value = eval(expr, {"__builtins__": None}, context)
                 results[label] = round(float(value), 2)
             except Exception:
                 results[label] = 0
@@ -248,7 +265,6 @@ class PriceCalculationFormulaView(APIView):
         return results
 
     def post(self, request):
-
         price_configuration = request.data.get("price_configuration")
         base_net_amount = request.data.get("base_net_amount")
         variables = request.data.get("variables", {})
@@ -269,44 +285,14 @@ class PriceCalculationFormulaView(APIView):
         return Response(results)
 
 
-class VariableFormulaView(APIView):
-    def get(self, request):
-        code = request.query_params.get("code")
-        if not code:
-            return Response({"error": "El parámetro code es requerido."}, status=400)
-
-        from accounting.models import FiscalDirective
-
-        fiscal_details = FiscalConfigurationDetail.objects.filter(module_config_id=code)
-
-        directive_codes = fiscal_details.values_list("fiscal_directive", flat=True)
-        directives = FiscalDirective.objects.filter(code__in=directive_codes)
-        directive_map = {d.code: d for d in directives}
-
-        data = []
-        for detail in fiscal_details:
-            directive = directive_map.get(detail.fiscal_directive)
-            if directive:
-                data.append(
-                    {
-                        "var": detail.var,
-                        "value": directive.value,
-                    }
-                )
-
-        return Response(data)
-
-
 class ProductPriceHistoryView(APIView):
-
     def get(self, request, sku):
-
         product = Product.objects.filter(sku=sku).first()
         if not product:
             return Response({"detail": "Producto no encontrado."}, status=404)
 
         prices = (
-            Price.objects.filter(products=product)
+            Price.objects.filter(record_item_code=sku)  # FIX correcto
             .order_by("created_at")
             .values("created_at", "base_net_amount")
         )
