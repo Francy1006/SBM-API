@@ -299,3 +299,7 @@ Thumbs.db
 
 # Project specific
 # Add any project-specific files or directories here
+
+
+.env.dev
+.env.prod
