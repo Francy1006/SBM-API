@@ -303,3 +303,6 @@ Thumbs.db
 
 .env.dev
 .env.prod
+# SonarQube artifacts
+.sonar/
+report-task.txt

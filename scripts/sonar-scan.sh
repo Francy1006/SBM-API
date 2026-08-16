@@ -4,12 +4,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 ENV_FILE="${ROOT}/.env.dev"
-REPORT_TASK="${ROOT}/.scannerwork/report-task.txt"
+REPORT_TASK="${ROOT}/report-task.txt"
 
 [[ -f "${ENV_FILE}" ]] || {
   echo "ERROR: No existe .env.dev" >&2
   exit 1
 }
+
 [[ -s "${ROOT}/coverage.xml" ]] || {
   echo "ERROR: coverage.xml no existe. Ejecute primero scripts/coverage.sh" >&2
   exit 1
@@ -26,17 +27,20 @@ SONAR_API_URL="${SONAR_API_URL:-${SONAR_HOST_URL}}"
 
 cd "${ROOT}"
 rm -rf .scannerwork
+rm -f "${REPORT_TASK}"
 
 docker run --rm \
   --network sbm-network \
   -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
   -e SONAR_TOKEN="${SONAR_TOKEN}" \
-  -v "${ROOT}:/usr/src" \
-  -w /usr/src \
-  sonarsource/sonar-scanner-cli:latest
+  -v "${ROOT}/.sonar/cache:/opt/sonar-scanner/.sonar/cache" \
+  -v "${ROOT}:/usr/src/app" \
+  -w /usr/src/app \
+  sonarsource/sonar-scanner-cli:latest \
+  -Dsonar.scanner.metadataFilePath=/usr/src/app/report-task.txt
 
 [[ -f "${REPORT_TASK}" ]] || {
-  echo "ERROR: SonarScanner no generó .scannerwork/report-task.txt" >&2
+  echo "ERROR: SonarScanner no generó report-task.txt" >&2
   exit 1
 }
 
@@ -51,7 +55,9 @@ for _ in $(seq 1 60); do
   response="$(curl --fail --silent --show-error \
     -u "${SONAR_TOKEN}:" \
     "${SONAR_API_URL%/}/api/ce/task?id=${ce_task_id}")"
+
   status="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["task"]["status"])' <<< "${response}")"
+
   case "${status}" in
     SUCCESS)
       analysis_id="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["task"].get("analysisId", ""))' <<< "${response}")"
@@ -62,6 +68,7 @@ for _ in $(seq 1 60); do
       exit 1
       ;;
   esac
+
   sleep 2
 done
 
@@ -73,6 +80,7 @@ done
 qg_response="$(curl --fail --silent --show-error \
   -u "${SONAR_TOKEN}:" \
   "${SONAR_API_URL%/}/api/qualitygates/project_status?analysisId=${analysis_id}")"
+
 quality_gate="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["projectStatus"]["status"])' <<< "${qg_response}")"
 
 case "${quality_gate}" in
