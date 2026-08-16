@@ -31,9 +31,16 @@ docker compose --env-file "${ENV_FILE}" run \
 set -eu
 python manage.py check
 coverage erase
-coverage run \
+TEST_OUTPUT="$(coverage run \
   --source=accounting,calculation,catalog,clients,config,core,fiscal,franchise,inventory,module,price,sales,support,users \
-  manage.py test
+  manage.py test 2>&1)"
+printf "%s\n" "$TEST_OUTPUT"
+
+if printf "%s\n" "$TEST_OUTPUT" | grep -Eq "Found 0 test\(s\)|Ran 0 tests"; then
+  echo "ERROR: SBM-API no tiene tests ejecutables" >&2
+  exit 1
+fi
+
 coverage xml -o /tmp/coverage.xml
 coverage report -m
 '
