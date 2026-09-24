@@ -306,3 +306,4 @@ Thumbs.db
 # SonarQube artifacts
 .sonar/
 report-task.txt
+.scannerwork/
